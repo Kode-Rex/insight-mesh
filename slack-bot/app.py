@@ -393,11 +393,6 @@ async def handle_message(
                     thread_ts=thread_ts
                 )
                 logger.info(f"Response sent successfully: {response}")
-                
-                # Set suggested follow-up prompts
-                if thread_ts:
-                    logger.info("Setting suggested prompts")
-                    await set_suggested_prompts(client, channel, thread_ts)
             else:
                 logger.error("No LLM response received, sending error message")
                 await client.chat_postMessage(
@@ -653,10 +648,22 @@ async def handle_suggested_prompt(ack, body, client):
 
 def main():
     """Start the Slack bot asynchronously"""
+    # Set bot presence to "auto" (online) using a synchronous client
+    try:
+        from slack_sdk import WebClient as SyncWebClient
+        sync_client = SyncWebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
+        presence_response = sync_client.users_setPresence(presence="auto")
+        logger.info(f"Set bot presence to online: {presence_response}")
+    except Exception as e:
+        logger.error(f"Error setting bot presence: {e}")
+        import traceback
+        logger.error(f"Presence error traceback: {traceback.format_exc()}")
+    
     async def run():
         handler = AsyncSocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
         logger.info("Starting Insight Mesh Assistant with AI Apps support...")
         await handler.start_async()
+    
     asyncio.run(run())
 
 if __name__ == "__main__":
