@@ -331,7 +331,16 @@ async def get_context(
             ContextItem(
                 content=doc.content,
                 role="system",
-                metadata={"source": doc.source}
+                metadata={
+                    "source": doc.source,
+                    "document_id": doc.metadata.get("id"),
+                    "url": doc.metadata.get("url"),
+                    "file_name": doc.metadata.get("file_name"),
+                    "created_time": doc.metadata.get("created_time"),
+                    "modified_time": doc.metadata.get("modified_time"),
+                    "relevance_score": doc.metadata.get("score"),
+                    "source_type": doc.metadata.get("source_type")
+                }
             )
             for doc in context_result.documents
         ]

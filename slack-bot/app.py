@@ -1,173 +1,91 @@
 import os
-import logging
-import aiohttp
 import asyncio
-from typing import Optional, Dict, Any, List
+import logging
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.aiohttp import AsyncSocketModeHandler
 from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+
+# Import our modules
+from config.settings import settings
+from utils.logging import configure_logging
+from services.llm_service import LLMService
+from services.slack_service import SlackService
+from handlers.event_handlers import register_handlers
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = configure_logging(settings.log_level)
 
-# Initialize Slack app
-app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
-
-# LLM configuration
-LLM_API_URL = os.environ.get("LLM_API_URL", "http://localhost:8000/v1")
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4")
-
-async def get_llm_response(
-    messages: List[Dict[str, str]],
-    session: Optional[aiohttp.ClientSession] = None
-) -> Optional[str]:
-    """Get response from LLM via LiteLLM proxy"""
-    if not LLM_API_KEY:
-        return None
-        
-    headers = {
-        "Authorization": f"Bearer {LLM_API_KEY}",
-        "Content-Type": "application/json"
-    }
+def create_app():
+    """Create and configure the Slack app"""
+    # Initialize Slack app
+    app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
     
-    payload = {
-        "model": LLM_MODEL,
-        "messages": messages,
-        "temperature": 0.7,
-        "max_tokens": 1000
-    }
+    # Create services
+    client = app.client
+    llm_service = LLMService(settings.llm)
+    slack_service = SlackService(settings.slack, client)
     
-    close_session = False
-    if session is None:
-        session = aiohttp.ClientSession()
-        close_session = True
+    # Register event handlers
+    asyncio.create_task(register_handlers(app, slack_service, llm_service))
+    
+    return app, slack_service, llm_service
+
+async def maintain_presence(client: WebClient):
+    """Keep the bot's presence status active"""
+    while True:
+        try:
+            await client.users_setPresence(presence="auto")
+            logger.debug("Updated bot presence status")
+        except Exception as e:
+            logger.error(f"Error updating presence: {e}")
         
+        # Sleep for 5 minutes
+        await asyncio.sleep(300)
+
+async def run():
+    """Start the Slack bot asynchronously"""
+    # Create and configure the app
+    app, slack_service, llm_service = create_app()
+    
+    # Set bot presence to "auto" (online)
     try:
-        async with session.post(
-            f"{LLM_API_URL}/chat/completions",
-            headers=headers,
-            json=payload
-        ) as response:
-            if response.status == 200:
-                result = await response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                error_text = await response.text()
-                logger.error(f"LLM API error: {response.status} - {error_text}")
-                return None
+        auth_test = await app.client.auth_test()
+        logger.info(f"Auth test response: {auth_test}")
+        logger.info(f"Bot user ID: {auth_test.get('user_id')}")
+        logger.info(f"Bot name: {auth_test.get('user')}")
+        
+        # Update bot ID if not set
+        if not slack_service.bot_id:
+            slack_service.bot_id = auth_test.get('user_id')
+            logger.info(f"Updated bot ID to: {slack_service.bot_id}")
+        
+        # Set initial presence
+        logger.info("Setting presence to 'auto'...")
+        presence_response = await app.client.users_setPresence(presence="auto")
+        logger.info(f"Presence API response: {presence_response}")
+        
+        # Start the presence maintenance task
+        asyncio.create_task(maintain_presence(app.client))
     except Exception as e:
-        logger.error(f"Error calling LLM API: {e}")
-        return None
+        logger.error(f"Error during startup: {e}")
+        import traceback
+        logger.error(f"Startup error traceback: {traceback.format_exc()}")
+    
+    try:
+        # Start the Socket Mode handler
+        handler = AsyncSocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
+        logger.info("Starting Insight Mesh Assistant...")
+        await handler.start_async()
+    except Exception as e:
+        logger.error(f"Error starting socket mode: {e}")
+        import traceback
+        logger.error(f"Socket mode error traceback: {traceback.format_exc()}")
     finally:
-        if close_session:
-            await session.close()
-
-async def handle_message(
-    text: str,
-    user_id: str,
-    client: WebClient,
-    channel: str,
-    thread_ts: Optional[str] = None
-):
-    print(f"DEBUG: Entered handle_message with text={text}, user_id={user_id}, channel={channel}, thread_ts={thread_ts}")
-    try:
-        # async with aiohttp.ClientSession() as session:
-        #     session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
-        #     messages = [
-        #         {"role": "system", "content": "You are a helpful assistant. ..."},
-        #         {"role": "user", "content": text}
-        #     ]
-        #     llm_response = await get_llm_response(messages, session=session)
-        #     if llm_response:
-        #         await client.chat_postMessage(
-        #             channel=channel,
-        #             text=llm_response,
-        #             thread_ts=thread_ts
-        #         )
-        #     else:
-        #         await client.chat_postMessage(
-        #             channel=channel,
-        #             text="I'm sorry, I encountered an error while generating a response.",
-        #             thread_ts=thread_ts
-        #         )
-        # Instead, just send a static test message:
-        print("DEBUG: About to send static test message")
-        await client.chat_postMessage(
-            channel=channel,
-            text="TEST: WORKING MESSAGE RESPONSE",
-            thread_ts=thread_ts
-        )
-        print("DEBUG: Static test message sent successfully")
-    except Exception as e:
-        print(f"DEBUG: Exception in handle_message: {e}")
-        import traceback
-        traceback.print_exc()
-        logger.error(f"Error handling message: {e}")
-        await client.chat_postMessage(
-            channel=channel,
-            text="I'm sorry, something went wrong. Please try again later.",
-            thread_ts=thread_ts
-        )
-
-@app.event("app_mention")
-async def handle_mention(body, say, client):
-    """Handle when the bot is mentioned in a channel"""
-    print("DEBUG: handle_mention received body (repr):", repr(body))
-    print("DEBUG: handle_mention received event (repr):", repr(body["event"]))
-    try:
-        user_id = body["event"]["user"]
-        text = body["event"]["text"]
-        text = text.split("<@", 1)[-1].split(">", 1)[-1].strip() if ">" in text else text
-        await handle_message(
-            text=text,
-            user_id=user_id,
-            client=client,
-            channel=body["event"]["channel"],
-            thread_ts=body["event"].get("thread_ts")
-        )
-    except Exception as e:
-        print("DEBUG: Exception in handle_mention:", e)
-        import traceback
-        traceback.print_exc()
-        logger.error(f"Error handling mention: {e}")
-        await say("I'm sorry, I encountered an error while processing your request.")
-
-@app.event("message")
-async def handle_direct_message(body, client):
-    """Handle direct messages to the bot"""
-    print("DEBUG: handle_direct_message received body (repr):", repr(body))
-    print("DEBUG: handle_direct_message received event (repr):", repr(body["event"]))
-    try:
-        event = body["event"]
-        if event.get("bot_id") or event.get("channel_type") != "im":
-            return
-        user_id = event["user"]
-        await handle_message(
-            text=event["text"],
-            user_id=user_id,
-            client=client,
-            channel=event["channel"],
-            thread_ts=event.get("thread_ts")
-        )
-    except Exception as e:
-        print("DEBUG: Exception in handle_direct_message:", e)
-        import traceback
-        traceback.print_exc()
-        logger.error(f"Error handling direct message: {e}")
-        await client.chat_postMessage(
-            channel=event["channel"],
-            text="I'm sorry, I encountered an error while processing your request."
-        )
+        # Close services
+        await llm_service.close()
 
 def main():
-    """Start the Slack bot asynchronously"""
-    async def run():
-        handler = AsyncSocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
-        await handler.start_async()
-        print("DEBUG: Slack AsyncApp active sessions (s_… identifiers) reported:", app._session_ids)
+    """Main entry point"""
     asyncio.run(run())
 
 if __name__ == "__main__":
