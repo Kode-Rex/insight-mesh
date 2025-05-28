@@ -151,9 +151,69 @@ class RAGHandler(CustomLogger):
                 logger.warning("No messages in request")
                 return data
 
-            # Always use default token as expected by MCP server
+            # Log full metadata contents
+            metadata = data.get("metadata", {})
+            logger.info(f"Full metadata: {metadata.keys()}")
+            
+            # Log full headers if available
+            if "headers" in metadata:
+                logger.info(f"Headers in metadata: {metadata['headers']}")
+            
+            # Log proxy_server_request
+            proxy_request = data.get("proxy_server_request", {})
+            if proxy_request:
+                logger.info(f"Proxy request headers: {proxy_request.get('headers', {})}")
+            
+            # Log user_api_key_dict details
+            if hasattr(user_api_key_dict, "headers"):
+                logger.info(f"user_api_key_dict headers: {user_api_key_dict.headers}")
+            
+            if hasattr(user_api_key_dict, "metadata"):
+                logger.info(f"user_api_key_dict metadata: {user_api_key_dict.metadata}")
+
+            # Extract auth token from metadata if available
             auth_token = "default_token"
-            logger.info("Using default token for MCP server")
+            token_type = TOKEN_TYPE
+            
+            # Check if we have metadata with user information
+            metadata = data.get("metadata", {})
+            
+            # Try to extract headers from the original request
+            if "X-Auth-Token" in metadata:
+                auth_token = metadata["X-Auth-Token"]
+                # If token is in format slack:USER_ID, extract the user ID
+                if auth_token.startswith("slack:"):
+                    token_type = "Slack"
+                logger.info(f"Using auth token from X-Auth-Token header: {auth_token[:10]}... (Type: {token_type})")
+            # Check the headers passed via user_api_key_dict
+            elif hasattr(user_api_key_dict, "headers") and user_api_key_dict.headers:
+                auth_header = user_api_key_dict.headers.get("x-auth-token") or user_api_key_dict.headers.get("X-Auth-Token")
+                if auth_header:
+                    auth_token = auth_header
+                    # If token is in format slack:USER_ID, extract the user ID
+                    if auth_token.startswith("slack:"):
+                        token_type = "Slack"
+                    logger.info(f"Using auth token from user_api_key_dict headers: {auth_token[:10]}... (Type: {token_type})")
+            # Check metadata headers
+            elif "headers" in metadata and metadata["headers"]:
+                headers = metadata["headers"]
+                auth_header = headers.get("x-auth-token") or headers.get("X-Auth-Token")
+                if auth_header:
+                    auth_token = auth_header
+                    if auth_token.startswith("slack:"):
+                        token_type = "Slack"
+                    logger.info(f"Using auth token from metadata headers: {auth_token[:10]}... (Type: {token_type})")
+            # Check proxy_server_request headers
+            elif proxy_request and "headers" in proxy_request:
+                headers = proxy_request.get("headers", {})
+                auth_header = headers.get("x-auth-token") or headers.get("X-Auth-Token")
+                if auth_header:
+                    auth_token = auth_header
+                    if auth_token.startswith("slack:"):
+                        token_type = "Slack"
+                    logger.info(f"Using auth token from proxy_server_request headers: {auth_token[:10]}... (Type: {token_type})")
+            else:
+                logger.info(f"No auth token found in request, using default: {auth_token}")
             
             # Get the latest user message
             user_messages = [msg for msg in messages if msg.get("role") == "user"]
@@ -172,7 +232,7 @@ class RAGHandler(CustomLogger):
             context = await get_context_from_mcp(
                 api_key=MCP_API_KEY,
                 auth_token=auth_token,
-                token_type=TOKEN_TYPE,
+                token_type=token_type,
                 prompt=latest_user_message,
                 history_summary=history_summary,
                 session=session

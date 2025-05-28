@@ -43,7 +43,8 @@ AGENT_PROCESSES = {
 
 async def get_llm_response(
     messages: List[Dict[str, str]],
-    session: Optional[aiohttp.ClientSession] = None
+    session: Optional[aiohttp.ClientSession] = None,
+    user_id: Optional[str] = None
 ) -> Optional[str]:
     """Get response from LLM via LiteLLM proxy"""
     if not LLM_API_KEY:
@@ -55,12 +56,27 @@ async def get_llm_response(
         "Content-Type": "application/json"
     }
     
+    # Add user auth token if provided
+    if user_id:
+        auth_token = f"slack:{user_id}"
+        headers["X-Auth-Token"] = auth_token
+        logger.info(f"Added X-Auth-Token header: {auth_token}")
+    
     payload = {
         "model": LLM_MODEL,
         "messages": messages,
         "temperature": 0.7,
         "max_tokens": 1000
     }
+    
+    # Add metadata with user auth token for the callback pipeline
+    if user_id:
+        auth_token = f"slack:{user_id}"
+        payload["metadata"] = {
+            "X-Auth-Token": auth_token,
+            "user_id": user_id
+        }
+        logger.info(f"Added user auth token to metadata: {auth_token}")
     
     logger.info(f"LLM API URL: {LLM_API_URL}")
     logger.info(f"LLM Model: {LLM_MODEL}")
@@ -294,8 +310,7 @@ async def handle_message(
         llm_response = None
         try:
             async with aiohttp.ClientSession() as session:
-                session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
-                
+                # We'll add the auth header through our modified get_llm_response function
                 # Start with system message
                 messages = [
                     {"role": "system", "content": "You are a helpful assistant for Insight Mesh, a RAG (Retrieval-Augmented Generation) system. You help users understand and work with their data. You can also start agent processes on behalf of users when they request it."},
@@ -311,7 +326,11 @@ async def handle_message(
                     messages.append({"role": "user", "content": text})
                 
                 logger.info(f"Sending request to LLM API with {len(messages)} messages")
-                llm_response = await get_llm_response(messages, session=session)
+                llm_response = await get_llm_response(
+                    messages=messages, 
+                    session=session,
+                    user_id=user_id  # Pass user_id to the function
+                )
                 logger.info(f"Got LLM response: {llm_response is not None}")
         except Exception as llm_error:
             logger.error(f"Error getting LLM response: {llm_error}")
