@@ -204,13 +204,19 @@ async def update_home_tab(client: WebClient, user_id: str):
 async def set_assistant_status(client: WebClient, channel: str, thread_ts: str, status: str = "Thinking..."):
     """Set the assistant status indicator"""
     try:
-        await client.chat_update_assistant_typing(
-            channel=channel,
-            thread_ts=thread_ts,
-            status=status
-        )
+        # Using the proper typing indicator API
+        if status:
+            # Start typing
+            await client.chat_postEphemeral(
+                channel=channel,
+                user=client.token.split('-')[1].split(':')[0],
+                text=f"_{status}_",
+                thread_ts=thread_ts
+            )
+        # If empty status, we don't need to do anything as typing indicators
+        # automatically disappear after a few seconds
     except SlackApiError as e:
-        logger.error(f"Error setting assistant typing status: {e}")
+        logger.error(f"Error setting typing status: {e}")
 
 async def set_suggested_prompts(client: WebClient, channel: str, thread_ts: str, prompts: List[Dict[str, str]] = None):
     """Set suggested prompts for the assistant thread"""
@@ -218,10 +224,40 @@ async def set_suggested_prompts(client: WebClient, channel: str, thread_ts: str,
         prompts = DEFAULT_PROMPTS
     
     try:
-        await client.chat_assistants_prompt(
+        # Note: This is a simplified approach since the actual
+        # chat_assistants_prompt method might not be available
+        # We'll add the prompts as a message instead
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Suggested actions:*"
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": prompt["text"],
+                            "emoji": True
+                        },
+                        "value": prompt["action_id"],
+                        "action_id": prompt["action_id"]  # Use the action_id directly
+                    }
+                    for prompt in prompts[:5]  # Limit to 5 buttons
+                ]
+            }
+        ]
+        
+        await client.chat_postMessage(
             channel=channel,
-            thread_ts=thread_ts,
-            suggested_prompts=prompts
+            blocks=blocks,
+            text="Here are some suggested actions:",
+            thread_ts=thread_ts
         )
     except SlackApiError as e:
         logger.error(f"Error setting suggested prompts: {e}")
@@ -420,49 +456,127 @@ async def handle_mention(body, client):
     """Handle when the bot is mentioned in a channel"""
     logger.info("Received app mention")
     try:
-        user_id = body["event"]["user"]
-        text = body["event"]["text"]
+        event = body["event"]
+        user_id = event["user"]
+        text = event["text"]
         text = text.split("<@", 1)[-1].split(">", 1)[-1].strip() if ">" in text else text
+        channel = event["channel"]
+        
+        # Always use the original message timestamp as thread_ts if not already in a thread
+        thread_ts = event.get("thread_ts", event.get("ts"))
         
         await handle_message(
             text=text,
             user_id=user_id,
             client=client,
-            channel=body["event"]["channel"],
-            thread_ts=body["event"].get("thread_ts")
+            channel=channel,
+            thread_ts=thread_ts
         )
     except Exception as e:
         logger.error(f"Error handling mention: {e}")
         await client.chat_postMessage(
             channel=body["event"]["channel"],
             text="I'm sorry, I encountered an error while processing your request.",
-            thread_ts=body["event"].get("thread_ts")
+            thread_ts=body["event"].get("thread_ts", body["event"].get("ts"))
         )
 
 @app.event("message")
 async def handle_direct_message(body, client):
     """Handle direct messages to the bot"""
-    logger.info("Received message event")
+    logger.info(f"Received message event: {body}")
     try:
         event = body["event"]
-        # Skip if it's from a bot or not a DM
-        if event.get("bot_id") or event.get("channel_type") != "im":
+        
+        # Skip if it's from a bot
+        if event.get("bot_id"):
             return
             
-        user_id = event["user"]
-        await handle_message(
-            text=event["text"],
-            user_id=user_id,
-            client=client,
-            channel=event["channel"],
-            thread_ts=event.get("thread_ts")
-        )
+        # Handle both direct messages and messages in threads
+        channel_type = event.get("channel_type")
+        
+        # Process if it's a DM or a message in a thread mentioning the bot
+        if channel_type == "im" or (event.get("thread_ts") and "<@" in event.get("text", "")):
+            user_id = event["user"]
+            
+            # For DMs, always use thread_ts if available, or ts to create a thread
+            thread_ts = event.get("thread_ts", event.get("ts"))
+            
+            # For thread messages, check if it's directed at the bot
+            if channel_type != "im" and "<@" not in event.get("text", ""):
+                logger.info("Skipping thread message not directed at the bot")
+                return
+                
+            logger.info(f"Processing message in {'thread' if event.get('thread_ts') else 'new conversation'}")
+            
+            # Clean up text if it's a mention
+            text = event.get("text", "")
+            if "<@" in text:
+                # Extract text after the mention
+                text = text.split(">", 1)[-1].strip() if ">" in text else text
+            
+            await handle_message(
+                text=text,
+                user_id=user_id,
+                client=client,
+                channel=event["channel"],
+                thread_ts=thread_ts
+            )
     except Exception as e:
-        logger.error(f"Error handling direct message: {e}")
-        await client.chat_postMessage(
-            channel=event["channel"],
-            text="I'm sorry, I encountered an error while processing your request."
-        )
+        logger.error(f"Error handling message: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        try:
+            await client.chat_postMessage(
+                channel=event["channel"],
+                text="I'm sorry, I encountered an error while processing your request.",
+                thread_ts=event.get("thread_ts", event.get("ts"))
+            )
+        except Exception as e2:
+            logger.error(f"Error sending error message: {e2}")
+
+# Handle any button clicks from our suggested prompts
+@app.action("prompt_about")
+@app.action("prompt_query")
+@app.action("prompt_actions")
+@app.action("agent_index_data")
+@app.action("agent_check_status")
+@app.action("agent_import_slack")
+async def handle_suggested_prompt(ack, body, client):
+    """Handle when a user clicks a suggested prompt button"""
+    await ack()
+    try:
+        user_id = body["user"]["id"]
+        action_id = body["actions"][0]["action_id"]  # Get the action_id directly
+        channel_id = body["channel"]["id"]
+        thread_ts = body.get("message", {}).get("thread_ts") or body.get("container", {}).get("thread_ts")
+        
+        logger.info(f"Handling suggested prompt action: {action_id}")
+        
+        # Get the text for this action
+        prompt_text = next((p["text"] for p in DEFAULT_PROMPTS if p["action_id"] == action_id), None)
+        
+        if prompt_text:
+            if action_id.startswith("agent_"):
+                await handle_agent_action(
+                    action_id=action_id,
+                    user_id=user_id,
+                    client=client,
+                    channel=channel_id,
+                    thread_ts=thread_ts
+                )
+            else:
+                # For regular prompts, process as a message
+                await handle_message(
+                    text=prompt_text,
+                    user_id=user_id,
+                    client=client,
+                    channel=channel_id,
+                    thread_ts=thread_ts
+                )
+    except Exception as e:
+        logger.error(f"Error handling suggested prompt: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
 def main():
     """Start the Slack bot asynchronously"""
