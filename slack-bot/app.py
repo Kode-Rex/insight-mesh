@@ -111,6 +111,44 @@ async def get_llm_response(
         if close_session:
             await session.close()
 
+async def format_response_for_slack(response: str) -> str:
+    """Format LLM response for better rendering in Slack"""
+    if not response:
+        return response
+        
+    # Process source citations section
+    if "Sources used:" in response:
+        # Split the response into main content and sources section
+        main_content, sources_section = response.split("Sources used:", 1)
+        
+        # Format the sources section for better Slack rendering
+        formatted_sources = []
+        
+        # Find all source citations with markdown links [text](url)
+        link_pattern = r'\[(.*?)\]\((.*?)\)'
+        
+        # Preserve plain text sources and format URLs
+        lines = sources_section.strip().split('\n')
+        for line in lines:
+            # Skip empty lines
+            if not line.strip():
+                continue
+                
+            # Format line with links
+            if re.search(link_pattern, line):
+                # Slack format: <URL|text> 
+                formatted_line = re.sub(link_pattern, r'<\2|\1>', line)
+                formatted_sources.append(formatted_line)
+            else:
+                # No links, keep as is
+                formatted_sources.append(line)
+        
+        # Combine formatted parts
+        formatted_response = main_content + "Sources used:\n" + "\n".join(formatted_sources)
+        return formatted_response
+    
+    return response
+
 async def run_agent_process(process_id: str) -> Dict[str, Any]:
     """Run an agent process in the background and return status info"""
     if process_id not in AGENT_PROCESSES:
@@ -352,9 +390,13 @@ async def handle_message(
         try:
             if llm_response:
                 logger.info(f"Sending response to Slack: channel={channel}, thread_ts={thread_ts}")
+                
+                # Format the response for better rendering in Slack
+                formatted_response = await format_response_for_slack(llm_response)
+                
                 response = await client.chat_postMessage(
                     channel=channel,
-                    text=llm_response,
+                    text=formatted_response,
                     thread_ts=thread_ts
                 )
                 logger.info(f"Response sent successfully")
