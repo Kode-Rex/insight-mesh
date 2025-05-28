@@ -224,11 +224,15 @@ services:
       dockerfile: Dockerfile
     environment:
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
-      # SLACK_APP_TOKEN is only needed for Socket Mode in the slack-bot service
       - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
-      - LLM_API_URL=http://litellm:8000/v1
-      - LLM_API_KEY=sk-litellm-master-key-123456  # Updated to use master key
-      - LLM_MODEL=gpt-4
+      # Extract Bot ID from token in entrypoint script
+      - SLACK_BOT_ID=${SLACK_BOT_ID}
+      - LLM_API_URL=http://litellm:4000/v1
+      - LLM_API_KEY=sk-litellm-master-key-123456
+      - LLM_MODEL=gpt-4o-mini
+    volumes:
+      - ./slack-bot:/app
+    command: ["python", "/app/app.py"]
     depends_on:
       - litellm
       - mcp
