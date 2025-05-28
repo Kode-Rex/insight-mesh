@@ -36,11 +36,20 @@ class ContextService:
                 size=5  # Limit to top 5 most relevant documents
             )
             
-            # Create document results using Pydantic models
+            # Create document results using Pydantic models with enhanced metadata
             document_results = [
                 DocumentResult(
                     content=doc.content,
-                    source=self._transform_source(doc.metadata.source) if doc.metadata and doc.metadata.source else "unknown"
+                    source=self._transform_source(doc.metadata.source) if doc.metadata and doc.metadata.source else "unknown",
+                    metadata={
+                        "id": doc.id,
+                        "url": doc.metadata.web_link if doc.metadata and doc.metadata.web_link else None,
+                        "file_name": doc.metadata.file_name if doc.metadata and doc.metadata.file_name else None,
+                        "created_time": doc.metadata.created_time.isoformat() if doc.metadata and doc.metadata.created_time else None,
+                        "modified_time": doc.metadata.modified_time.isoformat() if doc.metadata and doc.metadata.modified_time else None,
+                        "score": doc.score,
+                        "source_type": doc.metadata.source if doc.metadata and doc.metadata.source else "unknown"
+                    }
                 )
                 for doc in documents
             ]

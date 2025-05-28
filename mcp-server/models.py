@@ -67,6 +67,7 @@ class DocumentResult(BaseModel):
     """Simple document result model for internal use"""
     content: str = Field(..., description="Document content")
     source: str = Field(default="unknown", description="Source of the document")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the document, including links")
 
 class ContextResult(BaseModel):
     """Internal context result model"""
