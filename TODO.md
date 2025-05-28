@@ -11,7 +11,7 @@
 - [x] **Forward to LiteLLM:**
   - Send messages with `X-Auth-Token: slack:{user_id}` header.
   - Use LiteLLM proxy for consistent handling with OpenWebUI.
-- [ ] **Test End-to-End:** (HIGH PRIORITY)
+- [x] **Test End-to-End:**
   - Validate that the bot responds correctly
   - Verify auth token handling in RAG hook
   - Test user permissions and context retrieval
@@ -24,6 +24,11 @@
   - Implement background process execution from Slack
   - Create agent process definitions for common tasks
   - Add user-friendly status reporting
+- [ ] **Enhance Source Citations:**
+  - Add URLs to source citations in responses
+  - Format citations to include document titles and types
+  - Make cited sources clickable in Slack
+  - Improve overall citation display format
 
 ## 1.1 Slack Agent Enhancements (MEDIUM PRIORITY)
 - [ ] **Add More Agent Processes:**

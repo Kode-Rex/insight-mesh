@@ -243,27 +243,45 @@ class RAGHandler(CustomLogger):
                 logger.info(f"Got {len(context['context_items'])} context items from MCP")
                 # Build the context string from context items
                 context_parts = []
-                document_sources = []  # Track document sources
+                document_sources = []  # Track document sources with metadata
                 for item in context["context_items"]:
-                    source = item.get("metadata", {}).get("source", "unknown")
+                    item_metadata = item.get("metadata", {})
+                    source = item_metadata.get("source", "unknown")
                     content = item.get("content", "")
+                    url = item_metadata.get("url")
+                    file_name = item_metadata.get("file_name")
+                    
                     if content:
                         # Clean up the content by removing BOM and extra whitespace
                         content = content.replace("\ufeff", "").strip()
-                        context_parts.append(f"[{source}]\n{content}\n")
-                        if source != "system_context":  # Don't include system context in sources
-                            document_sources.append(source)
+                        
+                        # Add source information with metadata
+                        source_info = f"[{source}]"
+                        if file_name:
+                            source_info += f" {file_name}"
+                        
+                        context_parts.append(f"{source_info}\n{content}\n")
+                        
+                        # Only add non-system context to document sources
+                        if source != "system_context":
+                            doc_meta = {
+                                "source": source,
+                                "url": url,
+                                "file_name": file_name
+                            }
+                            document_sources.append(doc_meta)
                 
                 context_str = "\n\n".join(context_parts)
                 logger.info(f"Context string length: {len(context_str)}")
                 
-                # Create a system message that instructs the model to cite sources
+                # Create a system message that instructs the model to cite sources with URLs
                 system_message = (
                     "You are a helpful assistant that MUST cite sources in EVERY response. "
                     "IMPORTANT: You MUST explicitly mention which documents you used in your answer. "
                     "Format your response like this:\n\n"
                     "1. First, provide your answer\n"
-                    "2. Then, on a new line, write 'Sources used:' followed by a list of the document sources you referenced\n\n"
+                    "2. Then, on a new line, write 'Sources used:' followed by a list of the document sources you referenced\n"
+                    "3. If the source has a URL, include it after the source name using the format: [Source Name](URL)\n\n"
                     "Here are the relevant documents to help answer the user's question:\n\n"
                     f"{context_str}\n\n"
                     "REMEMBER: You MUST cite your sources in EVERY response. If you don't cite sources, your response is incomplete."
