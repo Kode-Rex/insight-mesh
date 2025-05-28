@@ -20,9 +20,26 @@ This workflow runs all tests for the Insight Mesh project on every push to the m
    - Generates coverage reports
    - Uploads coverage to Codecov with the `mcpserver` flag
 
+3. **RAG Pipeline**
+   - Runs unit tests for the RAG pipeline component
+   - Generates coverage reports
+   - Uploads coverage to Codecov with the `ragpipeline` flag
+
+4. **Dagster Project**
+   - Runs unit tests for the Dagster data pipeline component
+   - Generates coverage reports
+   - Uploads coverage to Codecov with the `dagster` flag
+
+5. **Infrastructure Tests**
+   - Runs tests that verify infrastructure dependencies are working correctly
+   - Includes Neo4j connectivity test
+   - This job is optional and will not fail the workflow if it fails
+
 #### Environment Setup
 
 The workflow uses test environment variables to simulate the production environment without using real credentials.
+
+For infrastructure tests, Docker containers are spun up as services to provide the necessary infrastructure components like Neo4j.
 
 #### Running Tests Locally
 
@@ -38,6 +55,25 @@ To run the same tests locally:
    ```bash
    cd mcp-server
    python -m pytest tests/ -v --cov=. --cov-report=term-missing
+   ```
+
+3. For the RAG Pipeline:
+   ```bash
+   cd rag_pipeline
+   python -m pytest test_*.py -v --cov=. --cov-report=term-missing
+   ```
+
+4. For the Dagster Project:
+   ```bash
+   cd dagster_project
+   python -m pytest test_assets.py test_web_assets.py -v --cov=. --cov-report=term-missing
+   ```
+
+5. For Infrastructure Tests:
+   ```bash
+   # Neo4j test (requires Neo4j running locally)
+   cd dagster_project
+   python test_neo4j.py
    ```
 
 ## Adding New Workflows

@@ -81,9 +81,120 @@ jobs:
         flags: mcpserver
         fail_ci_if_error: false
 
-  # This job will only run when both test jobs succeed
+  test-rag-pipeline:
+    runs-on: ubuntu-latest
+    
+    env:
+      LLM_API_URL: http://localhost:4000/v1
+      LLM_API_KEY: test-api-key
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      working-directory: ./rag_pipeline
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov
+        
+    - name: Run RAG pipeline tests
+      working-directory: ./rag_pipeline
+      run: |
+        python -m pytest test_*.py -v --cov=. --cov-report=xml:coverage-rag.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./rag_pipeline/coverage-rag.xml
+        flags: ragpipeline
+        fail_ci_if_error: false
+
+  test-dagster-project:
+    runs-on: ubuntu-latest
+    
+    env:
+      DAGSTER_HOME: /tmp/dagster_home
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      working-directory: ./dagster_project
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov dagster dagster-webserver
+        
+    - name: Run Dagster tests
+      working-directory: ./dagster_project
+      run: |
+        # Exclude the Neo4j infrastructure test
+        python -m pytest test_assets.py test_web_assets.py -v --cov=. --cov-report=xml:coverage-dagster.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./dagster_project/coverage-dagster.xml
+        flags: dagster
+        fail_ci_if_error: false
+
+  test-infrastructure:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Make this job optional
+    
+    services:
+      neo4j:
+        image: neo4j:4.4
+        env:
+          NEO4J_AUTH: neo4j/password
+        ports:
+          - 7474:7474
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p password 'RETURN 1;'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install neo4j pytest
+        
+    - name: Run Neo4j infrastructure test
+      working-directory: ./dagster_project
+      run: |
+        python -c "
+        from neo4j import GraphDatabase
+        driver = GraphDatabase.driver('bolt://localhost:7687', auth=('neo4j', 'password'))
+        with driver.session() as session:
+            result = session.run('RETURN 1').single()[0]
+            print(f'Neo4j connection test result: {result}')
+            assert result == 1, 'Neo4j connection test failed'
+        "
+
+  # This job will only run when all required test jobs succeed
   test-summary:
-    needs: [test-slack-bot, test-mcp-server]
+    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project]
     runs-on: ubuntu-latest
     steps:
       - name: Tests Passed
