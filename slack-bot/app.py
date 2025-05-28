@@ -2,6 +2,7 @@ import os
 import logging
 import aiohttp
 import asyncio
+import re
 from typing import Optional, Dict, Any, List
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.aiohttp import AsyncSocketModeHandler
@@ -301,16 +302,74 @@ async def handle_message(
         except Exception as status_error:
             logger.error(f"Error setting status: {status_error}")
         
+        # Retrieve thread history if this is a message in a thread
+        thread_messages = []
+        if thread_ts and thread_ts != "None":
+            try:
+                logger.info(f"Retrieving thread history for thread {thread_ts}")
+                history_response = await client.conversations_replies(
+                    channel=channel,
+                    ts=thread_ts,
+                    limit=20  # Get up to 20 messages of context
+                )
+                
+                if history_response and history_response.get("messages"):
+                    messages = history_response["messages"]
+                    logger.info(f"Retrieved {len(messages)} messages from thread history")
+                    
+                    # Get bot's user ID to identify bot messages
+                    bot_info = await client.auth_test()
+                    bot_user_id = bot_info.get("user_id")
+                    
+                    # Process each message in the thread
+                    for msg in messages:
+                        # Skip the current message (it's the one we're processing)
+                        if msg.get("ts") == thread_ts and not text:
+                            continue
+                            
+                        msg_text = msg.get("text", "").strip()
+                        msg_user = msg.get("user")
+                        
+                        # Clean up message text (remove mentions)
+                        if "<@" in msg_text:
+                            msg_text = re.sub(r'<@[A-Z0-9]+>', '', msg_text).strip()
+                        
+                        # Skip empty messages
+                        if not msg_text:
+                            continue
+                            
+                        # Add to thread messages with appropriate role
+                        if msg_user == bot_user_id:
+                            thread_messages.append({"role": "assistant", "content": msg_text})
+                        else:
+                            thread_messages.append({"role": "user", "content": msg_text})
+                            
+                    logger.info(f"Processed {len(thread_messages)} meaningful messages from thread")
+            except Exception as e:
+                logger.error(f"Error retrieving thread history: {e}")
+                import traceback
+                logger.error(f"Thread history error traceback: {traceback.format_exc()}")
+        
         # Use the LLM to generate a response
         try:
             async with aiohttp.ClientSession() as session:
                 session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
+                
+                # Start with system message
                 messages = [
                     {"role": "system", "content": "You are a helpful assistant for Insight Mesh, a RAG (Retrieval-Augmented Generation) system. You help users understand and work with their data. You can also start agent processes on behalf of users when they request it."},
-                    {"role": "user", "content": text}
                 ]
                 
-                logger.info("Sending request to LLM API")
+                # Add thread history if available
+                if thread_messages:
+                    messages.extend(thread_messages)
+                    logger.info("Added thread history to context")
+                
+                # Add current message if it's not already included in thread history
+                if text and (not thread_messages or thread_messages[-1]["content"] != text):
+                    messages.append({"role": "user", "content": text})
+                
+                logger.info(f"Sending request to LLM API with {len(messages)} messages")
                 llm_response = await get_llm_response(messages, session=session)
                 logger.info(f"Got LLM response: {llm_response is not None}")
         except Exception as llm_error:
@@ -329,6 +388,7 @@ async def handle_message(
                     thread_ts=thread_ts
                 )
                 logger.info(f"Response sent successfully: {response}")
+                
             else:
                 logger.error("No LLM response received, sending error message")
                 await client.chat_postMessage(
@@ -578,15 +638,52 @@ def main():
     # Set bot presence to "auto" (online) using a synchronous client
     try:
         from slack_sdk import WebClient as SyncWebClient
-        sync_client = SyncWebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
+        token = os.environ.get("SLACK_BOT_TOKEN")
+        
+        # Log token format (first few chars) for debugging
+        if token:
+            token_prefix = token[:10] + "..." if len(token) > 10 else token
+            logger.info(f"Bot token prefix: {token_prefix}")
+        else:
+            logger.error("SLACK_BOT_TOKEN is not set")
+            
+        sync_client = SyncWebClient(token=token)
+        
+        # Get bot user info first to verify we have the right user
+        auth_test = sync_client.auth_test()
+        logger.info(f"Auth test response: {auth_test}")
+        logger.info(f"Bot user ID: {auth_test.get('user_id')}")
+        logger.info(f"Bot name: {auth_test.get('user')}")
+        
+        # Set presence with detailed logging
+        logger.info("Setting presence to 'auto'...")
         presence_response = sync_client.users_setPresence(presence="auto")
-        logger.info(f"Set bot presence to online: {presence_response}")
+        logger.info(f"Presence API response: {presence_response}")
+        
     except Exception as e:
         logger.error(f"Error setting bot presence: {e}")
         import traceback
         logger.error(f"Presence error traceback: {traceback.format_exc()}")
     
+    async def maintain_presence():
+        """Keep the bot's presence status active"""
+        while True:
+            try:
+                from slack_sdk import WebClient as SyncWebClient
+                sync_client = SyncWebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
+                sync_client.users_setPresence(presence="auto")
+                logger.debug("Updated bot presence status")
+            except Exception as e:
+                logger.error(f"Error updating presence: {e}")
+            
+            # Sleep for 5 minutes
+            await asyncio.sleep(300)
+    
     async def run():
+        # Start the presence maintenance task
+        asyncio.create_task(maintain_presence())
+        
+        # Start the Socket Mode handler
         handler = AsyncSocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
         logger.info("Starting Insight Mesh Assistant with AI Apps support...")
         await handler.start_async()
