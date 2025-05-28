@@ -16,6 +16,14 @@ if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_APP_TOKEN" ]; then
     exit 1
 fi
 
+# Extract Bot ID from token
+if [[ $SLACK_BOT_TOKEN =~ ^xoxb-([^-]+) ]]; then
+    export SLACK_BOT_ID=${BASH_REMATCH[1]}
+    echo "Extracted Bot ID: $SLACK_BOT_ID"
+else
+    echo "Warning: Could not extract Bot ID from token."
+fi
+
 echo "Starting Insight Mesh Slack AI Bot..."
 echo "Press Ctrl+C to stop the bot."
 

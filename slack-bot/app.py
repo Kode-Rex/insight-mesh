@@ -337,61 +337,105 @@ async def handle_message(
     channel: str,
     thread_ts: Optional[str] = None
 ):
-    logger.info(f"Handling message: {text} from user {user_id} in channel {channel}, thread {thread_ts}")
+    logger.info(f"Handling message: '{text}' from user {user_id} in channel {channel}, thread {thread_ts}")
+    
+    # Log all available environment variables that might affect this
+    logger.info(f"Bot ID: {os.environ.get('SLACK_BOT_ID', 'Not set')}")
+    logger.info(f"App ID: {os.environ.get('SLACK_APP_ID', 'Not set')}")
     
     # Check if this is an agent action trigger
     for prompt in DEFAULT_PROMPTS:
         if prompt["action_id"].startswith("agent_") and text.lower() == prompt["text"].lower():
+            logger.info(f"Detected agent action trigger: {prompt['action_id']}")
             await handle_agent_action(prompt["action_id"], user_id, client, channel, thread_ts)
             return
     
     try:
-        # Set thinking status if in a thread
+        # Log thread info more explicitly
         if thread_ts:
-            await set_assistant_status(client, channel, thread_ts, "Thinking...")
+            logger.info(f"Responding in existing thread: {thread_ts}")
+        else:
+            logger.info("Starting a new thread")
+            
+        # Set thinking status if in a thread
+        try:
+            if thread_ts:
+                await set_assistant_status(client, channel, thread_ts, "Thinking...")
+                logger.info("Set typing indicator")
+        except Exception as status_error:
+            logger.error(f"Error setting status: {status_error}")
         
         # Use the LLM to generate a response
-        async with aiohttp.ClientSession() as session:
-            session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
-            messages = [
-                {"role": "system", "content": "You are a helpful assistant for Insight Mesh, a RAG (Retrieval-Augmented Generation) system. You help users understand and work with their data. You can also start agent processes on behalf of users when they request it."},
-                {"role": "user", "content": text}
-            ]
+        try:
+            async with aiohttp.ClientSession() as session:
+                session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
+                messages = [
+                    {"role": "system", "content": "You are a helpful assistant for Insight Mesh, a RAG (Retrieval-Augmented Generation) system. You help users understand and work with their data. You can also start agent processes on behalf of users when they request it."},
+                    {"role": "user", "content": text}
+                ]
+                
+                logger.info("Sending request to LLM API")
+                llm_response = await get_llm_response(messages, session=session)
+                logger.info(f"Got LLM response: {llm_response is not None}")
+        except Exception as llm_error:
+            logger.error(f"Error getting LLM response: {llm_error}")
+            import traceback
+            logger.error(f"LLM error traceback: {traceback.format_exc()}")
+            llm_response = None
             
-            llm_response = await get_llm_response(messages, session=session)
-            
-            # Send the response and clear status
+        # Send the response and clear status
+        try:
             if llm_response:
-                await client.chat_postMessage(
+                logger.info(f"Sending response to Slack: channel={channel}, thread_ts={thread_ts}")
+                response = await client.chat_postMessage(
                     channel=channel,
                     text=llm_response,
                     thread_ts=thread_ts
                 )
+                logger.info(f"Response sent successfully: {response}")
                 
                 # Set suggested follow-up prompts
                 if thread_ts:
+                    logger.info("Setting suggested prompts")
                     await set_suggested_prompts(client, channel, thread_ts)
             else:
+                logger.error("No LLM response received, sending error message")
                 await client.chat_postMessage(
                     channel=channel,
                     text="I'm sorry, I encountered an error while generating a response.",
                     thread_ts=thread_ts
                 )
+        except Exception as posting_error:
+            logger.error(f"Error posting message to Slack: {posting_error}")
+            import traceback
+            logger.error(f"Posting error traceback: {traceback.format_exc()}")
             
-            # Clear the status if we were in a thread
+        # Clear the status if we were in a thread
+        try:
             if thread_ts:
                 await set_assistant_status(client, channel, thread_ts, "")
+        except Exception as clear_status_error:
+            logger.error(f"Error clearing status: {clear_status_error}")
                 
     except Exception as e:
         logger.error(f"Error handling message: {e}")
-        if thread_ts:
-            await set_assistant_status(client, channel, thread_ts, "")
+        import traceback
+        logger.error(f"Handle message traceback: {traceback.format_exc()}")
         
-        await client.chat_postMessage(
-            channel=channel,
-            text="I'm sorry, something went wrong. Please try again later.",
-            thread_ts=thread_ts
-        )
+        try:
+            if thread_ts:
+                await set_assistant_status(client, channel, thread_ts, "")
+        except:
+            pass
+        
+        try:
+            await client.chat_postMessage(
+                channel=channel,
+                text="I'm sorry, something went wrong. Please try again later.",
+                thread_ts=thread_ts
+            )
+        except Exception as final_error:
+            logger.error(f"Error sending final error message: {final_error}")
 
 # Action handlers for interactive components
 @app.action(r"start_agent_.*")
@@ -454,7 +498,7 @@ async def handle_assistant_thread_started(body, client):
 @app.event("app_mention")
 async def handle_mention(body, client):
     """Handle when the bot is mentioned in a channel"""
-    logger.info("Received app mention")
+    logger.info(f"Received app mention: {body}")
     try:
         event = body["event"]
         user_id = event["user"]
@@ -465,6 +509,8 @@ async def handle_mention(body, client):
         # Always use the original message timestamp as thread_ts if not already in a thread
         thread_ts = event.get("thread_ts", event.get("ts"))
         
+        logger.info(f"Handling mention in channel {channel}, thread {thread_ts}, text: '{text}'")
+        
         await handle_message(
             text=text,
             user_id=user_id,
@@ -474,65 +520,92 @@ async def handle_mention(body, client):
         )
     except Exception as e:
         logger.error(f"Error handling mention: {e}")
+        import traceback
+        logger.error(f"Mention handler traceback: {traceback.format_exc()}")
         await client.chat_postMessage(
             channel=body["event"]["channel"],
             text="I'm sorry, I encountered an error while processing your request.",
             thread_ts=body["event"].get("thread_ts", body["event"].get("ts"))
         )
 
+# Handle all message events
+@app.event({"type": "message", "subtype": None})
 @app.event("message")
-async def handle_direct_message(body, client):
-    """Handle direct messages to the bot"""
+async def handle_message_event(body, client):
+    """Handle all message events including those in threads"""
     logger.info(f"Received message event: {body}")
     try:
         event = body["event"]
         
         # Skip if it's from a bot
-        if event.get("bot_id"):
+        if event.get("bot_id") or event.get("subtype") == "bot_message":
+            logger.info("Skipping bot message")
+            return
+        
+        user_id = event.get("user")
+        if not user_id:
+            logger.info("Skipping message with no user")
             return
             
-        # Handle both direct messages and messages in threads
-        channel_type = event.get("channel_type")
+        channel = event.get("channel")
+        channel_type = event.get("channel_type", "")
+        text = event.get("text", "").strip()
+        thread_ts = event.get("thread_ts")
+        ts = event.get("ts")
         
-        # Process if it's a DM or a message in a thread mentioning the bot
-        if channel_type == "im" or (event.get("thread_ts") and "<@" in event.get("text", "")):
-            user_id = event["user"]
-            
-            # For DMs, always use thread_ts if available, or ts to create a thread
-            thread_ts = event.get("thread_ts", event.get("ts"))
-            
-            # For thread messages, check if it's directed at the bot
-            if channel_type != "im" and "<@" not in event.get("text", ""):
-                logger.info("Skipping thread message not directed at the bot")
-                return
-                
-            logger.info(f"Processing message in {'thread' if event.get('thread_ts') else 'new conversation'}")
-            
-            # Clean up text if it's a mention
-            text = event.get("text", "")
-            if "<@" in text:
-                # Extract text after the mention
-                text = text.split(">", 1)[-1].strip() if ">" in text else text
-            
+        logger.info(f"Processing message: channel_type={channel_type}, thread_ts={thread_ts}, text='{text}'")
+        
+        # ALWAYS process if:
+        # 1. It's a DM (im)
+        # 2. It's a thread message (respond to all thread messages for simplicity)
+        
+        # Check if message is in a DM
+        if channel_type == "im":
+            logger.info("Processing DM message")
             await handle_message(
                 text=text,
                 user_id=user_id,
                 client=client,
-                channel=event["channel"],
+                channel=channel,
+                thread_ts=thread_ts or ts  # Use thread_ts if in thread, otherwise ts
+            )
+            return
+            
+        # Check if message mentions the bot (in any context)
+        bot_id = os.environ.get("SLACK_BOT_ID", "")
+        is_mention = f"<@{bot_id}>" in text if bot_id else False
+        
+        if is_mention:
+            logger.info("Processing message with bot mention")
+            # Extract text after mention
+            clean_text = text.split(">", 1)[-1].strip() if ">" in text else text
+            await handle_message(
+                text=clean_text,
+                user_id=user_id,
+                client=client,
+                channel=channel,
+                thread_ts=thread_ts or ts
+            )
+            return
+            
+        # If in thread, respond to all messages in the thread
+        if thread_ts:
+            logger.info("Message is in a thread, processing")
+            await handle_message(
+                text=text,
+                user_id=user_id,
+                client=client,
+                channel=channel,
                 thread_ts=thread_ts
             )
+            return
+                
+        logger.info("Message doesn't meet criteria for bot response, ignoring")
+            
     except Exception as e:
-        logger.error(f"Error handling message: {e}")
+        logger.error(f"Error in message event handler: {e}")
         import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        try:
-            await client.chat_postMessage(
-                channel=event["channel"],
-                text="I'm sorry, I encountered an error while processing your request.",
-                thread_ts=event.get("thread_ts", event.get("ts"))
-            )
-        except Exception as e2:
-            logger.error(f"Error sending error message: {e2}")
+        logger.error(f"Message handler traceback: {traceback.format_exc()}")
 
 # Handle any button clicks from our suggested prompts
 @app.action("prompt_about")
