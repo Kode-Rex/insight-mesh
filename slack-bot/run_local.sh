@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "Error: .env file not found. Please create it with the required environment variables."
+# Check if .env file exists in parent directory
+if [ ! -f ../.env ]; then
+    echo "Error: .env file not found in project root. Please create it with the required environment variables."
     echo "Required variables: SLACK_BOT_TOKEN, SLACK_APP_TOKEN, LLM_API_URL, LLM_API_KEY"
     exit 1
 fi
 
-# Load environment variables from .env file
-export $(grep -v '^#' .env | xargs)
+# Load environment variables from parent .env file
+export $(grep -v '^#' ../.env | xargs)
 
 # Check for required environment variables
 if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_APP_TOKEN" ]; then
@@ -30,4 +30,4 @@ fi
 pip install -r requirements.txt
 
 # Run the bot
-python app_ai.py 
+python app.py 
