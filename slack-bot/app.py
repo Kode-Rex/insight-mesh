@@ -21,16 +21,6 @@ LLM_API_URL = os.environ.get("LLM_API_URL", "http://localhost:8000/v1")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4")
 
-# Default suggested prompts - including agent actions
-DEFAULT_PROMPTS = [
-    {"text": "Tell me about Insight Mesh", "action_id": "prompt_about"},
-    {"text": "How can I query my data?", "action_id": "prompt_query"},
-    {"text": "Start a data indexing job", "action_id": "agent_index_data"},
-    {"text": "Check job status", "action_id": "agent_check_status"},
-    {"text": "Import data from Slack", "action_id": "agent_import_slack"},
-    {"text": "Tell me about the actions I can take", "action_id": "prompt_actions"}
-]
-
 # Available agent processes
 AGENT_PROCESSES = {
     "agent_index_data": {
@@ -74,7 +64,6 @@ async def get_llm_response(
     
     logger.info(f"LLM API URL: {LLM_API_URL}")
     logger.info(f"LLM Model: {LLM_MODEL}")
-    logger.info(f"Request payload: {payload}")
     
     close_session = False
     if session is None:
@@ -82,7 +71,7 @@ async def get_llm_response(
         close_session = True
         
     try:
-        logger.info(f"Sending request to {LLM_API_URL}/chat/completions")
+        logger.info(f"Sending request to LLM API with {len(messages)} messages")
         async with session.post(
             f"{LLM_API_URL}/chat/completions",
             headers=headers,
@@ -138,90 +127,6 @@ async def run_agent_process(process_id: str) -> Dict[str, Any]:
             "error": str(e)
         }
 
-async def set_assistant_status(client: WebClient, channel: str, thread_ts: str, status: str = "Thinking..."):
-    """Set the assistant typing indicator"""
-    try:
-        if status:
-            # Use the RTM API typing indicator endpoint directly
-            try:
-                await client.post(
-                    "https://slack.com/api/typing",
-                    data={
-                        "channel": channel,
-                        "token": os.environ.get("SLACK_BOT_TOKEN")
-                    }
-                )
-                logger.info(f"Set typing indicator via direct API call")
-            except Exception as typing_error:
-                logger.error(f"Error with direct typing API: {typing_error}")
-                
-            # If that fails, use a status message
-            try:
-                # Post a simple message showing we're thinking
-                await client.chat_postMessage(
-                    channel=channel,
-                    text=f"_⏳ {status}_",
-                    thread_ts=thread_ts,
-                    mrkdwn=True,
-                    unfurl_links=False,
-                    unfurl_media=False
-                )
-                logger.info(f"Posted typing status message")
-            except Exception as msg_error:
-                logger.error(f"Error posting status message: {msg_error}")
-        else:
-            # Clear by doing nothing (just log it)
-            logger.info(f"Clearing typing indicator")
-            
-    except Exception as e:
-        logger.error(f"Error in set_assistant_status: {e}")
-        import traceback
-        logger.error(f"Status error traceback: {traceback.format_exc()}")
-
-async def set_suggested_prompts(client: WebClient, channel: str, thread_ts: str, prompts: List[Dict[str, str]] = None):
-    """Set suggested prompts for the assistant thread"""
-    if prompts is None:
-        prompts = DEFAULT_PROMPTS
-    
-    try:
-        # Note: This is a simplified approach since the actual
-        # chat_assistants_prompt method might not be available
-        # We'll add the prompts as a message instead
-        blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*Suggested actions:*"
-                }
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": prompt["text"],
-                            "emoji": True
-                        },
-                        "value": prompt["action_id"],
-                        "action_id": prompt["action_id"]  # Use the action_id directly
-                    }
-                    for prompt in prompts[:5]  # Limit to 5 buttons
-                ]
-            }
-        ]
-        
-        await client.chat_postMessage(
-            channel=channel,
-            blocks=blocks,
-            text="Here are some suggested actions:",
-            thread_ts=thread_ts
-        )
-    except SlackApiError as e:
-        logger.error(f"Error setting suggested prompts: {e}")
-
 async def handle_agent_action(action_id: str, user_id: str, client: WebClient, channel: str, thread_ts: str):
     """Handle agent process actions"""
     logger.info(f"Handling agent action: {action_id}")
@@ -234,11 +139,25 @@ async def handle_agent_action(action_id: str, user_id: str, client: WebClient, c
         )
         return
     
-    # Set a status to indicate we're starting the process
-    await set_assistant_status(client, channel, thread_ts, f"Starting {AGENT_PROCESSES[action_id]['name']}...")
+    # Show thinking indicator
+    thinking_message = await client.chat_postMessage(
+        channel=channel,
+        text="⏳ _Starting process..._",
+        thread_ts=thread_ts,
+        mrkdwn=True
+    )
     
     # Run the agent process
     result = await run_agent_process(action_id)
+    
+    # Delete thinking message
+    try:
+        await client.chat_delete(
+            channel=channel,
+            ts=thinking_message["ts"]
+        )
+    except Exception:
+        pass
     
     if result["success"]:
         # Create a rich message with process info
@@ -286,9 +205,6 @@ async def handle_agent_action(action_id: str, user_id: str, client: WebClient, c
             text=f"❌ Failed to start agent process: {result.get('error', 'Unknown error')}",
             thread_ts=thread_ts
         )
-    
-    # Clear the status
-    await set_assistant_status(client, channel, thread_ts, "")
 
 async def handle_message(
     text: str,
@@ -299,63 +215,28 @@ async def handle_message(
 ):
     logger.info(f"Handling message: '{text}' from user {user_id} in channel {channel}, thread {thread_ts}")
     
-    # For tracking the typing indicator message
-    typing_message_ts = None
-    
-    # Check if this is an agent action trigger
-    for prompt in DEFAULT_PROMPTS:
-        if prompt["action_id"].startswith("agent_") and text.lower() == prompt["text"].lower():
-            logger.info(f"Detected agent action trigger: {prompt['action_id']}")
-            await handle_agent_action(prompt["action_id"], user_id, client, channel, thread_ts)
-            return
+    # For tracking the thinking indicator message
+    thinking_message_ts = None
     
     try:
-        # Log thread info more explicitly
+        # Log thread info
         if thread_ts:
             logger.info(f"Responding in existing thread: {thread_ts}")
         else:
             logger.info("Starting a new thread")
             
-        # Set typing status if in a thread
+        # Post a thinking message (we'll delete this later)
         try:
-            if thread_ts:
-                # Try using the typing indicator
-                try:
-                    # This is the official way to trigger typing indicator
-                    await client.conversations_typing(channel=channel)
-                    logger.info("Set typing indicator using conversations_typing")
-                except Exception as typing_error:
-                    logger.error(f"Error with typing API: {typing_error}")
-                
-                # Also post a thinking message (we'll delete this later)
-                try:
-                    typing_response = await client.chat_postMessage(
-                        channel=channel,
-                        text="⏳ _Thinking..._",
-                        thread_ts=thread_ts,
-                        mrkdwn=True
-                    )
-                    typing_message_ts = typing_response["ts"]
-                    logger.info(f"Posted thinking message: {typing_message_ts}")
-                except Exception as msg_error:
-                    logger.error(f"Error posting thinking message: {msg_error}")
-        except Exception as status_error:
-            logger.error(f"Error setting status: {status_error}")
-            
-        # Create a task to keep typing indicator active
-        typing_active = True
-        
-        async def keep_typing():
-            """Keep the typing indicator active while we wait for LLM response"""
-            while typing_active:
-                try:
-                    await client.conversations_typing(channel=channel)
-                    logger.debug("Refreshed typing indicator")
-                except Exception:
-                    pass
-                await asyncio.sleep(2)  # Refresh every 2 seconds
-                
-        typing_task = asyncio.create_task(keep_typing())
+            thinking_response = await client.chat_postMessage(
+                channel=channel,
+                text="⏳ _Thinking..._",
+                thread_ts=thread_ts,
+                mrkdwn=True
+            )
+            thinking_message_ts = thinking_response["ts"]
+            logger.info(f"Posted thinking message: {thinking_message_ts}")
+        except Exception as msg_error:
+            logger.error(f"Error posting thinking message: {msg_error}")
             
         # Retrieve thread history if this is a message in a thread
         thread_messages = []
@@ -382,8 +263,8 @@ async def handle_message(
                         if msg.get("ts") == thread_ts and not text:
                             continue
                             
-                        # Skip the typing indicator message if we posted one
-                        if typing_message_ts and msg.get("ts") == typing_message_ts:
+                        # Skip the thinking indicator message if we posted one
+                        if thinking_message_ts and msg.get("ts") == thinking_message_ts:
                             continue
                             
                         msg_text = msg.get("text", "").strip()
@@ -410,6 +291,7 @@ async def handle_message(
                 logger.error(f"Thread history error traceback: {traceback.format_exc()}")
         
         # Use the LLM to generate a response
+        llm_response = None
         try:
             async with aiohttp.ClientSession() as session:
                 session.headers.update({"X-Auth-Token": f"slack:{user_id}"})
@@ -435,28 +317,19 @@ async def handle_message(
             logger.error(f"Error getting LLM response: {llm_error}")
             import traceback
             logger.error(f"LLM error traceback: {traceback.format_exc()}")
-            llm_response = None
-        
-        # Stop the typing indicator
-        typing_active = False
-        typing_task.cancel()
-        try:
-            await typing_task
-        except asyncio.CancelledError:
-            pass
             
         # Delete the thinking message if we posted one
-        if typing_message_ts:
+        if thinking_message_ts:
             try:
                 await client.chat_delete(
                     channel=channel,
-                    ts=typing_message_ts
+                    ts=thinking_message_ts
                 )
-                logger.info(f"Deleted thinking message: {typing_message_ts}")
+                logger.info(f"Deleted thinking message: {thinking_message_ts}")
             except Exception as delete_error:
                 logger.error(f"Error deleting thinking message: {delete_error}")
             
-        # Send the response and clear status
+        # Send the response
         try:
             if llm_response:
                 logger.info(f"Sending response to Slack: channel={channel}, thread_ts={thread_ts}")
@@ -465,8 +338,7 @@ async def handle_message(
                     text=llm_response,
                     thread_ts=thread_ts
                 )
-                logger.info(f"Response sent successfully: {response}")
-                
+                logger.info(f"Response sent successfully")
             else:
                 logger.error("No LLM response received, sending error message")
                 await client.chat_postMessage(
@@ -484,17 +356,12 @@ async def handle_message(
         import traceback
         logger.error(f"Handle message traceback: {traceback.format_exc()}")
         
-        # Stop typing and clean up
-        if 'typing_active' in locals() and 'typing_task' in locals():
-            typing_active = False
-            typing_task.cancel()
-        
         # Delete the thinking message if there was an error
-        if typing_message_ts:
+        if thinking_message_ts:
             try:
                 await client.chat_delete(
                     channel=channel,
-                    ts=typing_message_ts
+                    ts=thinking_message_ts
                 )
             except:
                 pass
@@ -508,36 +375,6 @@ async def handle_message(
         except Exception as final_error:
             logger.error(f"Error sending final error message: {final_error}")
 
-# Action handlers for interactive components
-@app.action(r"start_agent_.*")
-async def handle_start_agent_action(ack, body, client):
-    """Handle action when a user clicks a button to start an agent process"""
-    await ack()
-    try:
-        user_id = body["user"]["id"]
-        action_id = body["actions"][0]["value"]
-        channel_id = body["channel"]["id"]
-        
-        # For actions from Home tab, start a new DM conversation
-        if body["container"].get("type") == "home":
-            # Open a DM with the user
-            response = await client.conversations_open(users=[user_id])
-            channel_id = response["channel"]["id"]
-            thread_ts = None
-        else:
-            # For actions from messages, use the existing thread
-            thread_ts = body.get("message", {}).get("thread_ts")
-        
-        await handle_agent_action(
-            action_id=action_id,
-            user_id=user_id,
-            client=client,
-            channel=channel_id,
-            thread_ts=thread_ts
-        )
-    except Exception as e:
-        logger.error(f"Error handling start agent action: {e}")
-
 @app.event("assistant_thread_started")
 async def handle_assistant_thread_started(body, client):
     """Handle the event when a user starts an AI assistant thread"""
@@ -548,7 +385,7 @@ async def handle_assistant_thread_started(body, client):
         thread_ts = event.get("thread_ts")
         user_id = event.get("user")
         
-        # Optional: send a welcome message
+        # Send a welcome message
         await client.chat_postMessage(
             channel=channel_id,
             text="👋 Hello! I'm Insight Mesh Assistant. I can help answer questions about your data or start agent processes for you.",
@@ -560,7 +397,7 @@ async def handle_assistant_thread_started(body, client):
 @app.event("app_mention")
 async def handle_mention(body, client):
     """Handle when the bot is mentioned in a channel"""
-    logger.info(f"Received app mention: {body}")
+    logger.info("Received app mention")
     try:
         event = body["event"]
         user_id = event["user"]
@@ -583,19 +420,18 @@ async def handle_mention(body, client):
     except Exception as e:
         logger.error(f"Error handling mention: {e}")
         import traceback
-        logger.error(f"Mention handler traceback: {traceback.format_exc()}")
+        logger.error(f"Mention handler error: {traceback.format_exc()}")
         await client.chat_postMessage(
             channel=body["event"]["channel"],
             text="I'm sorry, I encountered an error while processing your request.",
             thread_ts=body["event"].get("thread_ts", body["event"].get("ts"))
         )
 
-# Handle all message events
 @app.event({"type": "message", "subtype": None})
 @app.event("message")
 async def handle_message_event(body, client):
     """Handle all message events including those in threads"""
-    logger.info(f"Received message event: {body}")
+    logger.info("Received message event")
     try:
         event = body["event"]
         
@@ -615,11 +451,7 @@ async def handle_message_event(body, client):
         thread_ts = event.get("thread_ts")
         ts = event.get("ts")
         
-        logger.info(f"Processing message: channel_type={channel_type}, thread_ts={thread_ts}, text='{text}'")
-        
-        # ALWAYS process if:
-        # 1. It's a DM (im)
-        # 2. It's a thread message (respond to all thread messages for simplicity)
+        logger.debug(f"Processing message: channel_type={channel_type}, thread_ts={thread_ts}, text='{text}'")
         
         # Check if message is in a DM
         if channel_type == "im":
@@ -667,51 +499,7 @@ async def handle_message_event(body, client):
     except Exception as e:
         logger.error(f"Error in message event handler: {e}")
         import traceback
-        logger.error(f"Message handler traceback: {traceback.format_exc()}")
-
-# Handle any button clicks from our suggested prompts
-@app.action("prompt_about")
-@app.action("prompt_query")
-@app.action("prompt_actions")
-@app.action("agent_index_data")
-@app.action("agent_check_status")
-@app.action("agent_import_slack")
-async def handle_suggested_prompt(ack, body, client):
-    """Handle when a user clicks a suggested prompt button"""
-    await ack()
-    try:
-        user_id = body["user"]["id"]
-        action_id = body["actions"][0]["action_id"]  # Get the action_id directly
-        channel_id = body["channel"]["id"]
-        thread_ts = body.get("message", {}).get("thread_ts") or body.get("container", {}).get("thread_ts")
-        
-        logger.info(f"Handling suggested prompt action: {action_id}")
-        
-        # Get the text for this action
-        prompt_text = next((p["text"] for p in DEFAULT_PROMPTS if p["action_id"] == action_id), None)
-        
-        if prompt_text:
-            if action_id.startswith("agent_"):
-                await handle_agent_action(
-                    action_id=action_id,
-                    user_id=user_id,
-                    client=client,
-                    channel=channel_id,
-                    thread_ts=thread_ts
-                )
-            else:
-                # For regular prompts, process as a message
-                await handle_message(
-                    text=prompt_text,
-                    user_id=user_id,
-                    client=client,
-                    channel=channel_id,
-                    thread_ts=thread_ts
-                )
-    except Exception as e:
-        logger.error(f"Error handling suggested prompt: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"Message handler error: {traceback.format_exc()}")
 
 def main():
     """Start the Slack bot asynchronously"""
@@ -765,7 +553,7 @@ def main():
         
         # Start the Socket Mode handler
         handler = AsyncSocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
-        logger.info("Starting Insight Mesh Assistant with AI Apps support...")
+        logger.info("Starting Insight Mesh Assistant...")
         await handler.start_async()
     
     asyncio.run(run())
