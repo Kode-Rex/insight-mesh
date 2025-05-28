@@ -6,7 +6,7 @@ import asyncio
 # Add the parent directory to sys.path to allow importing the module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from slack_bot.services.formatting import MessageFormatter
+from services.formatting import MessageFormatter
 
 
 class TestMessageFormatter:
