@@ -1,0 +1,90 @@
+name: Insight Mesh Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-slack-bot:
+    runs-on: ubuntu-latest
+    
+    env:
+      SLACK_BOT_TOKEN: xoxb-test-token
+      SLACK_APP_TOKEN: xapp-test-token
+      LLM_API_URL: http://localhost:4000/v1
+      LLM_API_KEY: test-api-key
+      LLM_MODEL: gpt-4.0o-mini
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      working-directory: ./slack-bot
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov
+        
+    - name: Run Slack bot tests
+      working-directory: ./slack-bot
+      run: |
+        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-slack-bot.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./slack-bot/coverage-slack-bot.xml
+        flags: slackbot
+        fail_ci_if_error: false
+        
+  test-mcp-server:
+    runs-on: ubuntu-latest
+    
+    env:
+      MCP_API_KEY: test-api-key
+      JWT_SECRET_KEY: test-secret-key
+      ELASTICSEARCH_URL: http://localhost:9200
+      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mcp_test
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      working-directory: ./mcp-server
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        
+    - name: Run MCP server tests
+      working-directory: ./mcp-server
+      run: |
+        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-mcp.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./mcp-server/coverage-mcp.xml
+        flags: mcpserver
+        fail_ci_if_error: false
+
+  # This job will only run when both test jobs succeed
+  test-summary:
+    needs: [test-slack-bot, test-mcp-server]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tests Passed
+        run: echo "All tests have passed!" 
