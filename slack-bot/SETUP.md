@@ -80,14 +80,15 @@ Create a `.env` file in your project root with the following variables:
 ```bash
 SLACK_BOT_TOKEN="xoxb-your-bot-token"
 SLACK_APP_TOKEN="xapp-your-app-token"
+SLACK_BOT_ID=""  # Optional, will be extracted from token if not provided
 LLM_API_URL="http://your-llm-api-url"
 LLM_API_KEY="your-llm-api-key"
-LLM_MODEL="gpt-4" # or other model supported by your LLM API
+LLM_MODEL="gpt-4o-mini"  # or other model supported by your LLM API
 ```
 
 ## Step 9: Configure Agent Processes
 
-The bot supports running agent processes in response to user requests. These processes are defined in the `AGENT_PROCESSES` dictionary in `app.py`.
+The bot supports running agent processes in response to user requests. These processes are defined in the `AGENT_PROCESSES` dictionary in `handlers/agent_processes.py`.
 
 By default, the following agent processes are available:
 
@@ -97,34 +98,44 @@ By default, the following agent processes are available:
 
 To add or modify agent processes:
 
-1. Edit the `AGENT_PROCESSES` dictionary in `app.py`
+1. Edit the `AGENT_PROCESSES` dictionary in `handlers/agent_processes.py`
 2. Make sure commands have the correct paths to their scripts
-3. Add corresponding entries to `DEFAULT_PROMPTS` to make them available as prompts
-4. Ensure the scripts are available and executable in the expected locations
+3. Ensure the scripts are available and executable in the expected locations
 
 ## Step 10: Run the Bot
 
-Start the bot using:
+### Running Locally
 
 ```bash
 cd slack-bot
 python app.py
 ```
 
-Or using the provided script:
-
-```bash
-cd slack-bot
-./run_local.sh
-```
-
-Or using Docker:
+### Running with Docker
 
 ```bash
 cd slack-bot
 docker build -t insight-mesh-slack-bot .
 docker run -d --env-file .env --name insight-mesh-bot insight-mesh-slack-bot
 ```
+
+### Running with Docker Compose
+
+```bash
+# From the project root
+docker-compose up -d slack-bot
+```
+
+## Configuration Options
+
+The bot uses Pydantic for configuration management. The main settings are defined in `config/settings.py`:
+
+- **SlackSettings**: Manages Slack tokens and credentials
+- **LLMSettings**: Manages LLM API connection details
+- **AgentSettings**: Manages agent process configuration
+- **Settings**: Main application settings
+
+You can customize these settings via environment variables.
 
 ## Verifying Setup
 

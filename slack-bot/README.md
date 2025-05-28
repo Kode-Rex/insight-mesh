@@ -10,6 +10,7 @@ A Slack bot for Insight Mesh that leverages Slack's API to provide intelligent a
 - **RAG Integration**: Connects to your LLM API for Retrieval-Augmented Generation
 - **Agent Processes**: Allows users to start and monitor data processing jobs directly from Slack
 - **Simplified Interface**: Clean interface showing only Messages and About tabs
+- **Modular Architecture**: Well-structured code with separation of concerns
 
 ## Quick Start
 
@@ -20,12 +21,12 @@ A Slack bot for Insight Mesh that leverages Slack's API to provide intelligent a
    SLACK_APP_TOKEN=xapp-your-app-token
    LLM_API_URL=http://your-llm-api-url
    LLM_API_KEY=your-llm-api-key
-   LLM_MODEL=gpt-4
+   LLM_MODEL=gpt-4o-mini
    ```
 3. Run the bot:
    ```bash
    cd slack-bot
-   ./run_local.sh
+   python app.py
    ```
    
 ## Docker Deployment
@@ -37,12 +38,42 @@ docker build -t insight-mesh-slack-bot .
 docker run -d --env-file .env --name insight-mesh-bot insight-mesh-slack-bot
 ```
 
+Or with Docker Compose:
+
+```bash
+# Already included in the main docker-compose.yml
+docker-compose up -d slack-bot
+```
+
 ## Architecture
 
 The bot is built using:
 - **slack-bolt**: Slack's official Python framework for building Slack apps
 - **aiohttp**: Asynchronous HTTP client/server for Python
+- **pydantic**: Data validation and settings management
 - **LiteLLM Proxy**: Compatible with OpenAI's API for connecting to different LLM providers
+
+### Project Structure
+
+```
+slack-bot/
+├── config/            # Configuration management
+│   ├── settings.py    # Pydantic settings models
+├── handlers/          # Event handling
+│   ├── agent_processes.py  # Agent process functionality
+│   ├── event_handlers.py   # Slack event handlers
+│   ├── message_handlers.py # Message handling logic
+├── services/          # Core services
+│   ├── llm_service.py      # LLM API integration
+│   ├── slack_service.py    # Slack API integration
+│   ├── formatting.py       # Message formatting utilities
+├── utils/             # Utilities
+│   ├── errors.py           # Error handling
+│   ├── logging.py          # Logging configuration
+├── app.py             # Main application entry point
+├── Dockerfile         # Docker configuration
+└── requirements.txt   # Python dependencies
+```
 
 ## Slack Integration Features
 
@@ -79,7 +110,7 @@ Start a data indexing job
 
 To add a new agent process:
 
-1. Add it to the `AGENT_PROCESSES` dictionary in `app.py`:
+1. Add it to the `AGENT_PROCESSES` dictionary in `handlers/agent_processes.py`:
    ```python
    "agent_your_process": {
        "name": "Your Process Name",
@@ -87,16 +118,34 @@ To add a new agent process:
        "command": "python path/to/script.py arg1 arg2"
    }
    ```
-2. Add a corresponding prompt in `DEFAULT_PROMPTS`:
-   ```python
-   {"text": "Start your process", "action_id": "agent_your_process"}
-   ```
+2. Ensure the LLM system message (in `handlers/message_handlers.py`) mentions the capability
 
 ## Development
 
-- **app.py**: Main application with Slack bot implementation
-- **requirements.txt**: Python dependencies
-- **SETUP.md**: Configuration guide for Slack app settings
+### Local Setup
+
+1. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Create a `.env` file with your configuration
+4. Run the bot:
+   ```bash
+   python app.py
+   ```
+
+### Code Organization
+
+- **config/settings.py**: Pydantic settings models for configuration management
+- **handlers/**: Contains all event and message handling logic
+- **services/**: Core service functionality (LLM, Slack API, formatting)
+- **utils/**: Utility functions and helpers
+- **app.py**: Main application entry point
 
 ## Troubleshooting
 
@@ -106,6 +155,7 @@ If you're experiencing issues:
 2. Check that your environment variables are set correctly
 3. Verify your LLM API is accessible from the bot
 4. Look for error messages in the bot logs
+5. Check the specific service logs to pinpoint issues
 
 ## Notes About Socket Mode
 
