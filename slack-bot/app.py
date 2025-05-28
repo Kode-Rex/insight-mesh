@@ -139,21 +139,44 @@ async def run_agent_process(process_id: str) -> Dict[str, Any]:
         }
 
 async def set_assistant_status(client: WebClient, channel: str, thread_ts: str, status: str = "Thinking..."):
-    """Set the assistant status indicator"""
+    """Set the assistant typing indicator"""
     try:
-        # Using the proper typing indicator API
         if status:
-            # Start typing
-            await client.chat_postEphemeral(
-                channel=channel,
-                user=client.token.split('-')[1].split(':')[0],
-                text=f"_{status}_",
-                thread_ts=thread_ts
-            )
-        # If empty status, we don't need to do anything as typing indicators
-        # automatically disappear after a few seconds
-    except SlackApiError as e:
-        logger.error(f"Error setting typing status: {e}")
+            # Use the RTM API typing indicator endpoint directly
+            try:
+                await client.post(
+                    "https://slack.com/api/typing",
+                    data={
+                        "channel": channel,
+                        "token": os.environ.get("SLACK_BOT_TOKEN")
+                    }
+                )
+                logger.info(f"Set typing indicator via direct API call")
+            except Exception as typing_error:
+                logger.error(f"Error with direct typing API: {typing_error}")
+                
+            # If that fails, use a status message
+            try:
+                # Post a simple message showing we're thinking
+                await client.chat_postMessage(
+                    channel=channel,
+                    text=f"_⏳ {status}_",
+                    thread_ts=thread_ts,
+                    mrkdwn=True,
+                    unfurl_links=False,
+                    unfurl_media=False
+                )
+                logger.info(f"Posted typing status message")
+            except Exception as msg_error:
+                logger.error(f"Error posting status message: {msg_error}")
+        else:
+            # Clear by doing nothing (just log it)
+            logger.info(f"Clearing typing indicator")
+            
+    except Exception as e:
+        logger.error(f"Error in set_assistant_status: {e}")
+        import traceback
+        logger.error(f"Status error traceback: {traceback.format_exc()}")
 
 async def set_suggested_prompts(client: WebClient, channel: str, thread_ts: str, prompts: List[Dict[str, str]] = None):
     """Set suggested prompts for the assistant thread"""
@@ -276,9 +299,8 @@ async def handle_message(
 ):
     logger.info(f"Handling message: '{text}' from user {user_id} in channel {channel}, thread {thread_ts}")
     
-    # Log all available environment variables that might affect this
-    logger.info(f"Bot ID: {os.environ.get('SLACK_BOT_ID', 'Not set')}")
-    logger.info(f"App ID: {os.environ.get('SLACK_APP_ID', 'Not set')}")
+    # For tracking the typing indicator message
+    typing_message_ts = None
     
     # Check if this is an agent action trigger
     for prompt in DEFAULT_PROMPTS:
@@ -294,14 +316,47 @@ async def handle_message(
         else:
             logger.info("Starting a new thread")
             
-        # Set thinking status if in a thread
+        # Set typing status if in a thread
         try:
             if thread_ts:
-                await set_assistant_status(client, channel, thread_ts, "Thinking...")
-                logger.info("Set typing indicator")
+                # Try using the typing indicator
+                try:
+                    # This is the official way to trigger typing indicator
+                    await client.conversations_typing(channel=channel)
+                    logger.info("Set typing indicator using conversations_typing")
+                except Exception as typing_error:
+                    logger.error(f"Error with typing API: {typing_error}")
+                
+                # Also post a thinking message (we'll delete this later)
+                try:
+                    typing_response = await client.chat_postMessage(
+                        channel=channel,
+                        text="⏳ _Thinking..._",
+                        thread_ts=thread_ts,
+                        mrkdwn=True
+                    )
+                    typing_message_ts = typing_response["ts"]
+                    logger.info(f"Posted thinking message: {typing_message_ts}")
+                except Exception as msg_error:
+                    logger.error(f"Error posting thinking message: {msg_error}")
         except Exception as status_error:
             logger.error(f"Error setting status: {status_error}")
+            
+        # Create a task to keep typing indicator active
+        typing_active = True
         
+        async def keep_typing():
+            """Keep the typing indicator active while we wait for LLM response"""
+            while typing_active:
+                try:
+                    await client.conversations_typing(channel=channel)
+                    logger.debug("Refreshed typing indicator")
+                except Exception:
+                    pass
+                await asyncio.sleep(2)  # Refresh every 2 seconds
+                
+        typing_task = asyncio.create_task(keep_typing())
+            
         # Retrieve thread history if this is a message in a thread
         thread_messages = []
         if thread_ts and thread_ts != "None":
@@ -325,6 +380,10 @@ async def handle_message(
                     for msg in messages:
                         # Skip the current message (it's the one we're processing)
                         if msg.get("ts") == thread_ts and not text:
+                            continue
+                            
+                        # Skip the typing indicator message if we posted one
+                        if typing_message_ts and msg.get("ts") == typing_message_ts:
                             continue
                             
                         msg_text = msg.get("text", "").strip()
@@ -377,6 +436,25 @@ async def handle_message(
             import traceback
             logger.error(f"LLM error traceback: {traceback.format_exc()}")
             llm_response = None
+        
+        # Stop the typing indicator
+        typing_active = False
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
+            
+        # Delete the thinking message if we posted one
+        if typing_message_ts:
+            try:
+                await client.chat_delete(
+                    channel=channel,
+                    ts=typing_message_ts
+                )
+                logger.info(f"Deleted thinking message: {typing_message_ts}")
+            except Exception as delete_error:
+                logger.error(f"Error deleting thinking message: {delete_error}")
             
         # Send the response and clear status
         try:
@@ -400,24 +478,26 @@ async def handle_message(
             logger.error(f"Error posting message to Slack: {posting_error}")
             import traceback
             logger.error(f"Posting error traceback: {traceback.format_exc()}")
-            
-        # Clear the status if we were in a thread
-        try:
-            if thread_ts:
-                await set_assistant_status(client, channel, thread_ts, "")
-        except Exception as clear_status_error:
-            logger.error(f"Error clearing status: {clear_status_error}")
                 
     except Exception as e:
         logger.error(f"Error handling message: {e}")
         import traceback
         logger.error(f"Handle message traceback: {traceback.format_exc()}")
         
-        try:
-            if thread_ts:
-                await set_assistant_status(client, channel, thread_ts, "")
-        except:
-            pass
+        # Stop typing and clean up
+        if 'typing_active' in locals() and 'typing_task' in locals():
+            typing_active = False
+            typing_task.cancel()
+        
+        # Delete the thinking message if there was an error
+        if typing_message_ts:
+            try:
+                await client.chat_delete(
+                    channel=channel,
+                    ts=typing_message_ts
+                )
+            except:
+                pass
         
         try:
             await client.chat_postMessage(
