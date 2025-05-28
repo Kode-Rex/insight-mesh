@@ -137,70 +137,6 @@ async def run_agent_process(process_id: str) -> Dict[str, Any]:
             "error": str(e)
         }
 
-async def update_home_tab(client: WebClient, user_id: str):
-    """Update the Home tab for a user with available actions"""
-    try:
-        # Create blocks for the Home tab
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Insight Mesh Assistant",
-                    "emoji": True
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "Welcome to Insight Mesh! I can help you interact with your data or run data processing tasks."
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Available Agent Actions",
-                    "emoji": True
-                }
-            }
-        ]
-        
-        # Add agent process actions
-        for process_id, process in AGENT_PROCESSES.items():
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{process['name']}*\n{process['description']}"
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": f"Start {process['name']}",
-                        "emoji": True
-                    },
-                    "value": process_id,
-                    "action_id": f"start_{process_id}"
-                }
-            })
-        
-        # Publish view
-        await client.views_publish(
-            user_id=user_id,
-            view={
-                "type": "home",
-                "blocks": blocks
-            }
-        )
-    except SlackApiError as e:
-        logger.error(f"Error publishing home tab: {e}")
-
 async def set_assistant_status(client: WebClient, channel: str, thread_ts: str, status: str = "Thinking..."):
     """Set the assistant status indicator"""
     try:
@@ -462,12 +398,6 @@ async def handle_start_agent_action(ack, body, client):
     except Exception as e:
         logger.error(f"Error handling start agent action: {e}")
 
-@app.event("app_home_opened")
-async def handle_app_home_opened(client, event):
-    """Handle when a user opens the app home tab"""
-    user_id = event["user"]
-    await update_home_tab(client, user_id)
-
 @app.event("assistant_thread_started")
 async def handle_assistant_thread_started(body, client):
     """Handle the event when a user starts an AI assistant thread"""
@@ -478,13 +408,10 @@ async def handle_assistant_thread_started(body, client):
         thread_ts = event.get("thread_ts")
         user_id = event.get("user")
         
-        # Set suggested prompts
-        await set_suggested_prompts(client, channel_id, thread_ts)
-        
         # Optional: send a welcome message
         await client.chat_postMessage(
             channel=channel_id,
-            text="👋 Hello! I'm Insight Mesh Assistant. I can help answer questions about your data or start agent processes for you. Try one of the suggested actions above!",
+            text="👋 Hello! I'm Insight Mesh Assistant. I can help answer questions about your data or start agent processes for you.",
             thread_ts=thread_ts
         )
     except Exception as e:

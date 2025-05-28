@@ -1,22 +1,20 @@
 # Insight Mesh Slack AI Bot
 
-A Slack bot for Insight Mesh that leverages Slack's latest AI Apps features to provide a better user experience.
+A Slack bot for Insight Mesh that leverages Slack's API to provide intelligent assistance via LLM integration.
 
 ## Features
 
-- **Slack AI Apps Integration**: Uses Slack's newest AI Apps interface for improved discoverability and user experience
 - **Thread Management**: Automatically manages conversation threads and context
 - **Typing Indicators**: Shows typing states while generating responses
-- **Suggested Prompts**: Provides helpful prompt suggestions to guide users
+- **Online Presence**: Shows as "online" with a green status indicator
 - **RAG Integration**: Connects to your LLM API for Retrieval-Augmented Generation
 - **Agent Processes**: Allows users to start and monitor data processing jobs directly from Slack
-- **Home Tab**: Custom App Home experience with quick action buttons
-- **Interactive Components**: Button actions for starting agent processes
+- **Simplified Interface**: Clean interface showing only Messages and About tabs
 
 ## Quick Start
 
 1. Follow the setup instructions in [SETUP.md](SETUP.md) to configure your Slack app
-2. Create a `.env` file with the following variables:
+2. Create a `.env` file with the following variables in your project root:
    ```
    SLACK_BOT_TOKEN=xoxb-your-bot-token
    SLACK_APP_TOKEN=xapp-your-app-token
@@ -26,6 +24,7 @@ A Slack bot for Insight Mesh that leverages Slack's latest AI Apps features to p
    ```
 3. Run the bot:
    ```bash
+   cd slack-bot
    ./run_local.sh
    ```
    
@@ -45,25 +44,21 @@ The bot is built using:
 - **aiohttp**: Asynchronous HTTP client/server for Python
 - **LiteLLM Proxy**: Compatible with OpenAI's API for connecting to different LLM providers
 
-## AI Apps Features
+## Slack Integration Features
 
-The bot uses several features from Slack's AI Apps framework:
+The bot implements several key Slack integration features:
 
-### 1. Assistant Typing Indicators
+### 1. Thread-Based Conversations
+The bot automatically creates and maintains threads for all conversations, keeping discussions organized.
+
+### 2. Typing Indicators
 Shows when the bot is "thinking" while generating a response.
 
-### 2. Suggested Prompts
-Provides helpful suggestions for users to try next, including:
-- General information prompts
-- Agent action prompts that trigger automated processes
+### 3. Universal Thread Response
+The bot will respond to any message in a thread it's part of, without requiring explicit mentions.
 
-### 3. App Home Tab
-Custom Home tab with:
-- Information about the bot
-- Quick action buttons for starting agent processes
-
-### 4. Interactive Components
-Button actions that allow users to trigger agent processes directly.
+### 4. Online Status
+The bot maintains an online presence with a green status indicator.
 
 ## Agent Processes
 
@@ -75,10 +70,10 @@ The bot enables users to start and manage data processing jobs directly from Sla
 - **Slack Import Job**: Import data from Slack channels
 - **Check Job Status**: Check the status of running jobs
 
-To start an agent process, users can:
-1. Select one of the suggested prompts (e.g., "Start a data indexing job")
-2. Type the exact command in the chat (e.g., "Start a data indexing job")
-3. Click a button in the App Home tab
+To start an agent process, users can type the command in chat:
+```
+Start a data indexing job
+```
 
 ### Adding Custom Agent Processes
 
@@ -99,8 +94,7 @@ To add a new agent process:
 
 ## Development
 
-- **app_ai.py**: Main application with AI Apps support
-- **app.py**: Legacy application (kept for reference)
+- **app.py**: Main application with Slack bot implementation
 - **requirements.txt**: Python dependencies
 - **SETUP.md**: Configuration guide for Slack app settings
 

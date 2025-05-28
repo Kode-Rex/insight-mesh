@@ -1,17 +1,13 @@
-# Slack AI App Setup Guide
+# Slack Bot Setup Guide
 
-This guide will help you configure your Slack app to use the latest AI Apps features.
+This guide will help you configure your Slack app to work with the Insight Mesh bot.
 
 ## Step 1: Create or Update App Configuration in Slack
 
 1. Go to [Slack API Apps page](https://api.slack.com/apps) and select your bot application (or create a new one)
-2. Navigate to "AI & Assistants" in the left navigation panel (formerly "Agents & AI Apps")
-3. Toggle on "Enable AI Features"
-4. Add an overview description (e.g., "Insight Mesh Assistant helps you interact with your data using RAG and run agent processes")
-5. Configure prompt suggestions:
-   - Select "Fixed prompts" and add the same prompts defined in our code, or
-   - Select "Dynamic prompts" if you prefer the app to generate them based on context
-6. Click "Save Changes"
+2. Provide a description (e.g., "Insight Mesh Assistant helps you interact with your data using RAG and run agent processes")
+3. Upload an app icon if desired
+4. Click "Save Changes"
 
 ## Step 2: Configure OAuth Scopes
 
@@ -27,16 +23,13 @@ This guide will help you configure your Slack app to use the latest AI Apps feat
    - `app_mentions:read` - Read @mentions
    - `commands` - Add slash commands
    - `users:read` - View users in the workspace
-   - `users:read.email` - View email addresses of users
+   - `users:write` - Set bot's online presence status
    - `channels:read` - View basic info about public channels
    - `channels:history` - View messages in public channels
    - `groups:read` - View basic info about private channels
    - `groups:history` - View messages in private channels
    - `reactions:write` - Add reactions to messages
    - `files:write` - Upload, edit, and delete files
-   - `chat.ai_prompts:write` - Use AI prompt suggestions
-   - `chat.ai_response_status:write` - Show typing indicators
-   - `chat.typing:write` - Use typing indicators
 3. Click "Save Changes"
 
 ## Step 3: Enable Socket Mode (for development)
@@ -54,17 +47,16 @@ This guide will help you configure your Slack app to use the latest AI Apps feat
 1. Navigate to "Event Subscriptions" in the left navigation panel
 2. Toggle on "Enable Events"
 3. Under "Subscribe to bot events" add the following:
-   - `app_home_opened` - When a user opens the App Home tab
    - `app_mention` - When the app is mentioned in a channel
    - `message.im` - When a message is sent in a DM with the app
-   - `message` - When a message is sent (for backward compatibility)
+   - `message` - When a message is sent
 4. Click "Save Changes"
 
-## Step 5: Configure App Home
+## Step 5: Disable App Home
 
 1. Navigate to "App Home" in the left navigation panel
-2. Toggle on "Home Tab" if not already enabled
-3. Toggle on "Allow users to send Slash commands and messages from the messages tab"
+2. Toggle OFF "Home Tab" 
+3. Toggle ON "Allow users to send messages in app home"
 4. Click "Save Changes"
 
 ## Step 6: Configure Interactivity
@@ -72,8 +64,7 @@ This guide will help you configure your Slack app to use the latest AI Apps feat
 1. Navigate to "Interactivity & Shortcuts" in the left navigation panel
 2. Toggle on "Interactivity"
 3. You can leave the Request URL blank for Socket Mode
-4. Under "Shortcuts", you can add shortcuts if needed
-5. Click "Save Changes"
+4. Click "Save Changes"
 
 ## Step 7: Reinstall App
 
@@ -84,7 +75,7 @@ This guide will help you configure your Slack app to use the latest AI Apps feat
 
 ## Step 8: Set Environment Variables
 
-Create a `.env` file with the following variables:
+Create a `.env` file in your project root with the following variables:
 
 ```bash
 SLACK_BOT_TOKEN="xoxb-your-bot-token"
@@ -116,28 +107,30 @@ To add or modify agent processes:
 Start the bot using:
 
 ```bash
+cd slack-bot
 python app.py
 ```
 
 Or using the provided script:
 
 ```bash
+cd slack-bot
 ./run_local.sh
 ```
 
 Or using Docker:
 
 ```bash
+cd slack-bot
 docker build -t insight-mesh-slack-bot .
 docker run -d --env-file .env --name insight-mesh-bot insight-mesh-slack-bot
 ```
 
 ## Verifying Setup
 
-1. In Slack, you should see your AI App in the sidebar (may need to search in Apps)
-2. Click on the app to open the AI split view
-3. Try one of the suggested prompts or ask a question
-4. You should see the typing indicator while it's thinking and then receive a response
-5. Try starting an agent process by using one of the agent prompts (e.g., "Start a data indexing job")
-6. The bot should respond with a confirmation that the process has started and provide status details
-7. Open the App Home tab to see the agent action buttons 
+1. In Slack, you should see your bot in the sidebar with an online status (green dot)
+2. Try sending a direct message to the bot
+3. Try mentioning the bot in a channel with `@insight-mesh hello`
+4. The bot should respond with messages in a thread
+5. Try starting an agent process by typing "Start a data indexing job"
+6. The bot should respond with a confirmation that the process has started 
