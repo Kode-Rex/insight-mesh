@@ -1,4 +1,4 @@
-from pydantic import HttpUrl, SecretStr, Field
+from pydantic import HttpUrl, SecretStr, Field, ConfigDict
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -8,8 +8,7 @@ class SlackSettings(BaseSettings):
     app_token: SecretStr
     bot_id: str = ""
     
-    class Config:
-        env_prefix = "SLACK_"
+    model_config = ConfigDict(env_prefix="SLACK_")
 
 class LLMSettings(BaseSettings):
     """LLM API settings"""
@@ -17,15 +16,13 @@ class LLMSettings(BaseSettings):
     api_key: SecretStr
     model: str = "gpt-4o-mini"
     
-    class Config:
-        env_prefix = "LLM_"
+    model_config = ConfigDict(env_prefix="LLM_")
 
 class AgentSettings(BaseSettings):
     """Agent process settings"""
     enabled: bool = True
     
-    class Config:
-        env_prefix = "AGENT_"
+    model_config = ConfigDict(env_prefix="AGENT_")
 
 class Settings(BaseSettings):
     """Main application settings"""
@@ -35,8 +32,7 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
     
-    class Config:
-        env_file = ".env"
+    model_config = ConfigDict(env_file=".env")
 
 # Create a singleton instance
 settings = Settings() 
