@@ -22,8 +22,8 @@ class TestConfig:
             "SLACK_BOT_ID": "B12345678"
         }):
             settings = SlackSettings()
-            assert settings.bot_token.get_secret_value() == "xoxb-test-token"
-            assert settings.app_token.get_secret_value() == "xapp-test-token"
+            assert settings.bot_token == "xoxb-test-token"
+            assert settings.app_token == "xapp-test-token"
             assert settings.bot_id == "B12345678"
 
     def test_llm_settings(self):
