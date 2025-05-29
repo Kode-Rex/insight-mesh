@@ -88,8 +88,20 @@ Shows when the bot is "thinking" while generating a response.
 ### 3. Universal Thread Response
 The bot will respond to any message in a thread it's part of, without requiring explicit mentions.
 
-### 4. Group Chat Support
-The bot works in group direct messages (multi-person DMs), but requires the `mpim:history` permission scope to read and respond to messages in group chat threads. Without this permission, the bot will only respond to direct mentions in group chats.
+### 4. Channel and Thread Support
+The bot works in all types of Slack conversations with the following behavior:
+
+- **Direct Messages (DMs)**: Always responds to all messages
+- **Group Direct Messages**: Requires the `mpim:history` permission
+- **Private Channels**: Requires the `groups:history` permission 
+- **Public Channels**: Requires the `channels:history` permission
+
+In all non-DM contexts (channels, group DMs), the bot:
+- Will respond to any message that directly @mentions it
+- Will automatically respond to all subsequent messages in a thread once it has been mentioned in that thread
+- No need to @mention the bot again for follow-up messages in the same thread
+
+If the bot doesn't respond in threads where it was previously mentioned, check that you have all the required permission scopes configured in your Slack app settings.
 
 ### 5. Online Status
 The bot maintains an online presence with a green status indicator.

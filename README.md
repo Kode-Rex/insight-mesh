@@ -12,6 +12,7 @@ Visit our website at [https://insightmesh.koderex.dev/](https://insightmesh.kode
 📚 RAG Pipeline	Python (your code) -> Custom RAG injection code loaded dynamically like a plugin _(Inject company data, do auth checks, add guardrails to make it safe and prod ready)_   
 🔍 Elasticsearch & Neo4j -> Data and agents layer for building powerful search and retrieval systems  
 🛡️ Caddy	-> Auth Proxy to allow OpenWebUI and LiteLLM to centralize auth  
+🤖 Slack Bot -> AI assistant that connects to your Slack workspace, enabling users to query data and trigger agent processes directly from Slack
 
 **All you need to do is build the data pipelines to ingest and index**
 
@@ -75,6 +76,25 @@ To set up Google OAuth for authentication:
 4. Copy your Client ID and Client Secret to the `.env` file or use the setup script
 5. By default, only users with email addresses from the specified domain (default: gmail.com) will be allowed access
 
+### Slack Bot Setup
+
+To integrate with Slack:
+
+1. Create a Slack app at [https://api.slack.com/apps](https://api.slack.com/apps)
+2. Configure your app with the required permissions (detailed in `slack-bot/SETUP.md`):
+   - Essential scopes: `app_mentions:read`, `chat:write`, `im:history`, `mpim:history`, `groups:history`, `channels:history`
+   - Event subscriptions: `app_mention`, `message.im`, `message.mpim`, `message.groups`, `message.channels`, `message`
+3. Add your Slack credentials to the `.env` file:
+   ```
+   SLACK_BOT_TOKEN=xoxb-your-bot-token
+   SLACK_APP_TOKEN=xapp-your-app-token
+   ```
+4. Restart the Slack bot or entire stack after configuration changes:
+   ```bash
+   docker-compose restart slack-bot
+   ```
+5. For complete setup instructions, see `slack-bot/SETUP.md`
+
 #### Environment Variables
 
 | Variable | Description | Default |
@@ -84,6 +104,10 @@ To set up Google OAuth for authentication:
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | - |
 | `DOMAIN` | Domain for your deployment | localhost |
 | `ALLOWED_EMAIL_DOMAIN` | Email domain allowed for authentication | gmail.com |
+| `SLACK_BOT_TOKEN` | Slack Bot User OAuth Token | - |
+| `SLACK_APP_TOKEN` | Slack App-Level Token | - |
+| `LLM_API_URL` | URL for LLM API | http://litellm:4000/v1 |
+| `LLM_MODEL` | Model to use with LLM API | gpt-4o-mini |
 
 ## Development
 

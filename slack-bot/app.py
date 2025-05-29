@@ -6,19 +6,22 @@ from slack_bolt.adapter.socket_mode.aiohttp import AsyncSocketModeHandler
 from slack_sdk import WebClient
 
 # Import our modules
-from config.settings import settings
+from config.settings import Settings
 from utils.logging import configure_logging
 from services.llm_service import LLMService
 from services.slack_service import SlackService
 from handlers.event_handlers import register_handlers
 
 # Configure logging
-logger = configure_logging(settings.log_level)
+configure_logging()
+logger = logging.getLogger(__name__)
 
 def create_app():
     """Create and configure the Slack app"""
-    # Initialize Slack app
-    app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
+    settings = Settings()
+    
+    # Initialize Slack app with token from settings
+    app = AsyncApp(token=settings.slack.bot_token)
     
     # Create services
     client = app.client
@@ -44,6 +47,16 @@ async def maintain_presence(client: WebClient):
 
 async def run():
     """Start the Slack bot asynchronously"""
+    # Display permission requirements warning
+    logger.warning("=== PERMISSION REQUIREMENTS ===")
+    logger.warning("To fully support thread responses, please ensure your Slack app has these permissions:")
+    logger.warning("- groups:history (for private channels)")
+    logger.warning("- mpim:history (for group DMs)")
+    logger.warning("- channels:history (for public channels)")
+    logger.warning("- im:history (for direct messages)")
+    logger.warning("If missing any of these, reinstall your app at https://api.slack.com/apps")
+    logger.warning("===============================")
+    
     # Create and configure the app
     app, slack_service, llm_service = create_app()
     

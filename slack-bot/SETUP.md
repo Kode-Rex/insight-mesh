@@ -19,6 +19,8 @@ This guide will help you configure your Slack app to work with the Insight Mesh 
    - `im:read` - View basic information about direct messages
    - `im:write` - Send messages in direct messages
    - `mpim:history` - View messages in group direct messages
+   - `groups:history` - View messages in private channels
+   - `channels:history` - View messages in public channels
    - `chat:write.customize` - Customize messages (for blocks)
    - `chat:write.public` - Send messages to channels the app isn't in
    - `app_mentions:read` - Read @mentions
@@ -26,9 +28,6 @@ This guide will help you configure your Slack app to work with the Insight Mesh 
    - `users:read` - View users in the workspace
    - `users:write` - Set bot's online presence status
    - `channels:read` - View basic info about public channels
-   - `channels:history` - View messages in public channels
-   - `groups:read` - View basic info about private channels
-   - `groups:history` - View messages in private channels
    - `reactions:write` - Add reactions to messages
    - `files:write` - Upload, edit, and delete files
 3. Click "Save Changes"
@@ -50,8 +49,12 @@ This guide will help you configure your Slack app to work with the Insight Mesh 
 3. Under "Subscribe to bot events" add the following:
    - `app_mention` - When the app is mentioned in a channel
    - `message.im` - When a message is sent in a DM with the app
-   - `message` - When a message is sent
+   - `message.mpim` - When a message is sent in a group DM
+   - `message.groups` - When a message is sent in a private channel
+   - `message.channels` - When a message is sent in a public channel
+   - `message` - When a message is sent (general catch-all)
 4. Click "Save Changes"
+5. **IMPORTANT**: After adding these events, you MUST reinstall your app for the changes to take effect
 
 ## Step 5: Disable App Home
 
