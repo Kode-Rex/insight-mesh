@@ -123,4 +123,72 @@ class SlackService:
             import traceback
             logger.error(f"Thread history error traceback: {traceback.format_exc()}")
         
-        return messages, success 
+        return messages, success
+        
+    async def get_thread_info(
+        self,
+        channel: str,
+        thread_ts: str
+    ) -> dict:
+        """Get information about a thread, including whether the bot is part of it"""
+        thread_info = {
+            "exists": False,
+            "message_count": 0,
+            "bot_is_participant": False,
+            "messages": [],
+            "participant_ids": set(),
+            "error": None
+        }
+        
+        try:
+            # Get the messages in the thread
+            logger.info(f"Retrieving thread info for thread {thread_ts} in channel {channel}")
+            history_response = await self.client.conversations_replies(
+                channel=channel,
+                ts=thread_ts,
+                limit=100  # Get a good sample of the thread
+            )
+            
+            if history_response and history_response.get("messages"):
+                messages = history_response["messages"]
+                thread_info["exists"] = True
+                thread_info["message_count"] = len(messages)
+                thread_info["messages"] = messages
+                
+                # Get bot's user ID if we don't have it yet
+                if not self.bot_id:
+                    bot_info = await self.client.auth_test()
+                    self.bot_id = bot_info.get("user_id")
+                
+                # Check if the bot is a participant and collect all participant IDs
+                for msg in messages:
+                    user_id = msg.get("user")
+                    if user_id:
+                        thread_info["participant_ids"].add(user_id)
+                    if user_id == self.bot_id:
+                        thread_info["bot_is_participant"] = True
+                
+                # Convert participant_ids to a list for serialization
+                thread_info["participant_ids"] = list(thread_info["participant_ids"])
+                
+                logger.info(f"Thread info: exists={thread_info['exists']}, count={thread_info['message_count']}, bot_participant={thread_info['bot_is_participant']}")
+                logger.info(f"Thread participants: {thread_info['participant_ids']}, bot_id={self.bot_id}")
+        except Exception as e:
+            error_msg = str(e)
+            thread_info["error"] = error_msg
+            logger.error(f"Error getting thread info: {error_msg}")
+            
+            # Check if this is a permission error
+            if "missing_scope" in error_msg:
+                needed_scope = "unknown"
+                if "needed" in error_msg:
+                    # Try to extract the needed scope from the error message
+                    import re
+                    match = re.search(r"needed: '([^']+)'", error_msg)
+                    if match:
+                        needed_scope = match.group(1)
+                
+                logger.error(f"Missing permission scope: {needed_scope}. Add this to your Slack app configuration.")
+                thread_info["error"] = f"Missing permission scope: {needed_scope}"
+            
+        return thread_info 

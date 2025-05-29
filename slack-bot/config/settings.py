@@ -4,8 +4,8 @@ from typing import Optional
 
 class SlackSettings(BaseSettings):
     """Slack API settings"""
-    bot_token: SecretStr
-    app_token: SecretStr
+    bot_token: str  # Changed from SecretStr to str for Slack SDK compatibility
+    app_token: str  # Changed from SecretStr to str for Slack SDK compatibility
     bot_id: str = ""
     
     model_config = ConfigDict(env_prefix="SLACK_")
