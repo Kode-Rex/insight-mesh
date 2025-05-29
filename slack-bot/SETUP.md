@@ -18,6 +18,7 @@ This guide will help you configure your Slack app to work with the Insight Mesh 
    - `im:history` - View messages in direct messages
    - `im:read` - View basic information about direct messages
    - `im:write` - Send messages in direct messages
+   - `mpim:history` - View messages in group direct messages
    - `chat:write.customize` - Customize messages (for blocks)
    - `chat:write.public` - Send messages to channels the app isn't in
    - `app_mentions:read` - Read @mentions

@@ -88,7 +88,10 @@ Shows when the bot is "thinking" while generating a response.
 ### 3. Universal Thread Response
 The bot will respond to any message in a thread it's part of, without requiring explicit mentions.
 
-### 4. Online Status
+### 4. Group Chat Support
+The bot works in group direct messages (multi-person DMs), but requires the `mpim:history` permission scope to read and respond to messages in group chat threads. Without this permission, the bot will only respond to direct mentions in group chats.
+
+### 5. Online Status
 The bot maintains an online presence with a green status indicator.
 
 ## Agent Processes
