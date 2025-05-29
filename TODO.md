@@ -71,6 +71,15 @@
   - Design endpoints for managing and visualizing business ops agents
   - Implement job scheduling and management API
   - Create monitoring endpoints for job status tracking
+- [ ] **Integrate WebCat with Serper.dev:** (HIGH PRIORITY)
+  - Port WebCat functionality as new MCP server component
+  - Implement serper.dev integration for web search capabilities
+  - Add support for news and image search APIs
+  - Create unified API endpoints for search, news, and image retrieval
+  - Ensure proper authentication and rate limiting
+  - Configure as internal tool with externally exposed endpoint
+  - Implement IP whitelisting for secured external access
+  - Set up proper request logging and monitoring
 - [ ] **Document API Contracts:** (HIGH PRIORITY)
   - Document auth token formats
   - Document request/response formats
@@ -82,6 +91,14 @@
   - Monitor token validation success/failure rates
   - Track context retrieval performance
   - Set up alerts for auth/permission issues
+- [ ] **Observability & Log Monitoring:** (HIGH PRIORITY)
+  - Implement centralized logging solution (ELK or similar)
+  - Set up dashboards for real-time system visibility
+  - Configure alerting based on log patterns and anomalies
+  - Create performance metrics dashboards
+  - Implement distributed tracing for request flows
+  - Set up error rate and latency monitoring
+  - Establish log retention and archiving policies
 - [ ] **Security:**
   - Review token handling security
   - Audit permission checks
@@ -93,7 +110,29 @@
   - Implement CI/CD pipeline for automated testing and deployment
   - Document deployment procedures
 
-## 4. Search & NLP Improvements (LOW PRIORITY)
+## 4. Admin Dashboard (HIGH PRIORITY)
+- [ ] **Core Dashboard:**
+  - Design and implement a central admin UI
+  - Create authentication and authorization for admin users
+  - Implement responsive design for desktop and mobile access
+  - Set up secure access controls and audit logging
+- [ ] **Logging & Monitoring Interface:**
+  - Create log viewer with filtering and search capabilities
+  - Implement system status dashboards and health metrics
+  - Set up alert management and notification configuration
+  - Add performance visualization tools
+- [ ] **User Management:**
+  - Implement user alias management and mapping
+  - Create user permission configuration interface
+  - Add user activity monitoring and reporting
+  - Implement role-based access controls
+- [ ] **System Configuration:**
+  - Add interface for managing system settings
+  - Create deployment and version management tools
+  - Implement backup and restore functionality
+  - Add integration management for connected systems
+
+## 5. Search & NLP Improvements (LOW PRIORITY)
 - [ ] **Entity Extraction Pipeline:**
   - Implement NLP entity extraction during indexing
   - Extract key entities (people, organizations, topics, etc.)
@@ -115,7 +154,7 @@
   - Add entity-based filtering options
   - Update RAG prompt to use entity context
 
-## 5. Testing & Documentation (HIGH PRIORITY)
+## 6. Testing & Documentation (HIGH PRIORITY)
 - [x] **MCP Server Testing:**
   - Create comprehensive test plan
   - Implement unit tests for all components
@@ -133,3 +172,25 @@
   - Document system architecture
   - Create API documentation
   - Document deployment and maintenance procedures
+
+## 7. Business Strategy (HIGH PRIORITY)
+- [ ] **Pricing Model:**
+  - Target $25-35/user/month for mid-market businesses (100-500 employees)
+  - Client carries infrastructure and LLM API costs
+  - We provide software, installation, configuration, and support
+  - Client handles day-to-day operations and monitoring
+- [ ] **Cost Structure Analysis:**
+  - Calculate development and maintenance costs
+  - Determine support requirements and associated costs
+  - Set target margins (70-80%)
+  - Establish pricing tiers based on company size/usage
+- [ ] **Go-to-Market Strategy:**
+  - Define ideal customer profile (mid-market, knowledge-intensive industries)
+  - Create marketing materials highlighting knowledge management pain points
+  - Develop ROI calculator to demonstrate value proposition
+  - Design onboarding process for new clients
+- [ ] **Support Model:**
+  - Define SLAs for different pricing tiers
+  - Establish support workflow and tooling
+  - Create documentation for client operations teams
+  - Develop training materials for client administrators
