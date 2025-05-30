@@ -101,6 +101,15 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # WebCat service for web search capabilities
+  webcat:
+    image: tmfrisinger/webcat:latest
+    ports:
+      - "8765:8765"
+    environment:
+      - PORT=8765
+      - SERPER_API_KEY=${SERPER_API_KEY}
+    restart: unless-stopped
 
   # Caddy reverse proxy
   caddy:
