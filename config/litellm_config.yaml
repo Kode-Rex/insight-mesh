@@ -25,6 +25,7 @@ model_list:
 
 environment_variables:
   OPENAI_API_KEY: ${OPENAI_API_KEY}
+  WEBCAT_API_KEY: ${WEBCAT_API_KEY}
 
 general_settings:
   completion_model: gpt-4o
@@ -55,20 +56,7 @@ litellm_settings:
   callbacks: rag_pipeline.pre_request_hook.rag_handler_instance
   forward_client_headers_to_llm_api: true
 
-# Tools configuration
-tools:
-  - type: function
-    function:
-      name: web_search
-      description: "Search the web for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information."
-      parameters:
-        type: object
-        properties:
-          search_term:
-            type: string
-            description: "The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant."
-          explanation:
-            type: string
-            description: "One sentence explanation as to why this tool is being used, and how it contributes to the goal."
-        required:
-          - search_term
+# MCP servers configuration for web search tool
+mcp_servers:
+  web_search:
+    url: "http://localhost:8765/search/sk-abc-123-def-456/sse"
