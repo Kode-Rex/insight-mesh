@@ -25,6 +25,7 @@ model_list:
 
 environment_variables:
   OPENAI_API_KEY: ${OPENAI_API_KEY}
+  WEBCAT_API_KEY: ${WEBCAT_API_KEY}
 
 general_settings:
   completion_model: gpt-4o
@@ -54,3 +55,8 @@ litellm_settings:
   request_timeout: 30
   callbacks: rag_pipeline.pre_request_hook.rag_handler_instance
   forward_client_headers_to_llm_api: true
+
+# MCP servers configuration for web search tool
+mcp_servers:
+  web_search:
+    url: "http://localhost:8765/search/sk-abc-123-def-456/sse"
