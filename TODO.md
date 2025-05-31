@@ -71,8 +71,7 @@
   - Design endpoints for managing and visualizing business ops agents
   - Implement job scheduling and management API
   - Create monitoring endpoints for job status tracking
-- [ ] **Integrate WebCat with Serper.dev:** (HIGH PRIORITY)
-  - Port WebCat functionality as new MCP server component
+- [x] **Integrate WebCat with Serper.dev:** (HIGH PRIORITY)
   - Implement serper.dev integration for web search capabilities
   - Add support for news and image search APIs
   - Create unified API endpoints for search, news, and image retrieval
