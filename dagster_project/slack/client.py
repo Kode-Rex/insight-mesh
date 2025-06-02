@@ -284,4 +284,17 @@ class SlackClient:
             }
         except SlackApiError as e:
             self.logger.error(f"Error getting channel permissions for {channel_id}: {e}")
-            raise 
+            raise
+
+    def get_permalink(self, channel_id: str, message_ts: str) -> str:
+        """Get a permalink URL for a message."""
+        try:
+            response = self._make_slack_call(
+                self.client.chat_getPermalink,
+                channel=channel_id,
+                message_ts=message_ts
+            )
+            return response.get("permalink", "")
+        except SlackApiError as e:
+            self.logger.error(f"Error getting permalink for message {message_ts} in channel {channel_id}: {e}")
+            return "" 

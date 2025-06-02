@@ -22,6 +22,7 @@ from dagster import (
     define_asset_job,
     AssetKey,
     EnvVar,
+    RetryPolicy
 )
 from google_drive.utils import compute_hash
 from google_drive.client import GoogleDriveClient
@@ -88,7 +89,10 @@ def get_google_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
-@asset(group_name="company_doc_imports")
+@asset(
+    group_name="company_doc_imports",
+    retry_policy=RetryPolicy(max_retries=3, delay=30),
+)
 def google_drive_service(context: AssetExecutionContext, config: GoogleDriveConfig):
     """Create and return a Google Drive service instance."""
     try:
@@ -283,7 +287,10 @@ def list_shared_resources(service, context):
     return shared_files
 
 
-@asset(group_name="company_doc_imports")
+@asset(
+    group_name="company_doc_imports",
+    retry_policy=RetryPolicy(max_retries=3, delay=60),  # Longer delay for file operations
+)
 def google_drive_files(context: AssetExecutionContext, config: GoogleDriveConfig, google_drive_service):
     """Fetch files and folders from Google Drive folders with permissions using GoogleDriveClient."""
     client = GoogleDriveClient(config.credentials_file)
@@ -344,7 +351,10 @@ def google_drive_files(context: AssetExecutionContext, config: GoogleDriveConfig
     return {"files": all_files, "folders": all_folders}
 
 
-@asset(group_name="company_doc_imports")
+@asset(
+    group_name="company_doc_imports",
+    retry_policy=RetryPolicy(max_retries=3, delay=60),  # Longer delay for indexing operations
+)
 def index_files(
     context: AssetExecutionContext,
     config: GoogleDriveConfig,

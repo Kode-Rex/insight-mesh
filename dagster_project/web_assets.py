@@ -1,5 +1,13 @@
 import logging
-from dagster import asset, AssetExecutionContext, Config, Definitions, ScheduleDefinition, define_asset_job
+from dagster import (
+    asset, 
+    AssetExecutionContext, 
+    Config, 
+    Definitions, 
+    ScheduleDefinition, 
+    define_asset_job,
+    RetryPolicy
+)
 from web.scraper import WebScraper
 
 # Configure logging
@@ -15,7 +23,9 @@ class WebScrapingConfig(Config):
     user_agent: str = "Mozilla/5.0 (compatible; InsightMesh/1.0; +https://insightmesh.com)"
     rate_limit_delay: float = 1.0
 
-@asset
+@asset(
+    retry_policy=RetryPolicy(max_retries=3, delay=60),  # Web scraping may need longer delays between retries
+)
 def scrape_website(context: AssetExecutionContext, config: WebScrapingConfig):
     """Asset to scrape a website and store its content in Neo4j and Elasticsearch."""
     try:

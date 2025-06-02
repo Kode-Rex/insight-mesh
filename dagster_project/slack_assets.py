@@ -2,7 +2,16 @@ import os
 import logging
 from typing import Dict, Any, List
 import pandas as pd
-from dagster import asset, AssetExecutionContext, MetadataValue, Config, Definitions, ScheduleDefinition, define_asset_job
+from dagster import (
+    asset, 
+    AssetExecutionContext, 
+    MetadataValue, 
+    Config, 
+    Definitions, 
+    ScheduleDefinition, 
+    define_asset_job,
+    RetryPolicy
+)
 
 from slack.client import SlackClient
 from slack.scraper import SlackScraper
@@ -25,7 +34,9 @@ class SlackConfig(Config):
     include_links: bool = True
     max_recursion_depth: int = 5
 
-@asset
+@asset(
+    retry_policy=RetryPolicy(max_retries=3, delay=30),  # Retry up to 3 times with 30s delay
+)
 def slack_users(context: AssetExecutionContext) -> pd.DataFrame:
     """Get all Slack users and their information and store in PostgreSQL."""
     client = SlackClient()
@@ -56,7 +67,9 @@ def slack_users(context: AssetExecutionContext) -> pd.DataFrame:
         context.log.error(f"Error getting user info: {e}")
         raise
 
-@asset
+@asset(
+    retry_policy=RetryPolicy(max_retries=3, delay=30),
+)
 def slack_channel_info(context: AssetExecutionContext) -> pd.DataFrame:
     """Get all Slack channels and their information and store in PostgreSQL."""
     client = SlackClient()
@@ -81,7 +94,9 @@ def slack_channel_info(context: AssetExecutionContext) -> pd.DataFrame:
         context.log.error(f"Error getting channel info: {e}")
         raise
 
-@asset
+@asset(
+    retry_policy=RetryPolicy(max_retries=3, delay=30),
+)
 def scrape_slack_content(context: AssetExecutionContext, config: SlackConfig, slack_channel_info: pd.DataFrame) -> Dict[str, Any]:
     """Scrape Slack content including messages, reactions, and files."""
     client = SlackClient()
