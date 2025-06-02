@@ -1,5 +1,6 @@
 import logging
 import hashlib
+import datetime
 from typing import Dict, Any, List, Optional
 from neo4j import GraphDatabase
 from elasticsearch import Elasticsearch
@@ -57,6 +58,25 @@ class SlackScraper:
     ):
         """Store data in Neo4j with relationships."""
         try:
+            # Process timestamp fields for Slack messages
+            processed_data = data.copy()
+            
+            # Convert Slack timestamp to a proper datetime format
+            if node_type == "SlackMessage" and "timestamp" in processed_data:
+                try:
+                    # Slack timestamps are in the format "1234567890.123456"
+                    ts_value = processed_data["timestamp"]
+                    if ts_value and isinstance(ts_value, str):
+                        # Split at the decimal point and convert to datetime
+                        parts = ts_value.split(".")
+                        if len(parts) == 2:
+                            seconds = int(parts[0])
+                            # Convert to ISO format for Neo4j datetime compatibility
+                            dt = datetime.datetime.fromtimestamp(seconds)
+                            processed_data["readable_timestamp"] = dt.isoformat()
+                except Exception as e:
+                    self.logger.warning(f"Error processing timestamp {processed_data.get('timestamp', 'unknown')}: {e}")
+            
             with self.neo4j.session() as session:
                 # Create or update node
                 query = f"""
@@ -64,8 +84,8 @@ class SlackScraper:
                 SET n += $properties
                 RETURN n
                 """
-                result = session.run(query, id=data["id"], properties=data)
-                self.logger.info(f"Stored {node_type} node with ID {data['id']}")
+                result = session.run(query, id=processed_data["id"], properties=processed_data)
+                self.logger.info(f"Stored {node_type} node with ID {processed_data['id']}")
 
                 # Create relationships if specified
                 if relationships:
