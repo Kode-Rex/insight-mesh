@@ -151,6 +151,9 @@ class SlackScraper:
 
             # Store messages
             for message in messages:
+                # Get permalink for the message
+                permalink = self.client.get_permalink(channel_id, message["ts"])
+                
                 message_data = {
                     "id": message["ts"],
                     "channel_id": channel_id,
@@ -161,6 +164,7 @@ class SlackScraper:
                     "user": message.get("user"),
                     "timestamp": message["ts"],
                     "thread_ts": message.get("thread_ts"),
+                    "permalink": permalink,
                     "reactions": message.get("reactions", []),
                     "attachments": message.get("attachments", []),
                     "files": message.get("files", []),

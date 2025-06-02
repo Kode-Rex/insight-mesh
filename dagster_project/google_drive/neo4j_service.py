@@ -32,6 +32,8 @@ class Neo4jService:
                 """
                 MERGE (f:File {id: $file_id})
                 SET f.name = $file_name,
+                    f.file_id = $file_id,
+                    f.file_name = $file_name,
                     f.mime_type = $mime_type,
                     f.created_time = $created_time,
                     f.modified_time = $modified_time,
