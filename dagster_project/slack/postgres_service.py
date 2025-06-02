@@ -73,6 +73,17 @@ class SlackPostgresService:
             
             for user_data in users:
                 try:
+                    # Skip users with empty emails to avoid unique constraint violations
+                    # Bots often have empty emails, so we need to handle this case
+                    if not user_data.get('email') and user_data.get('is_bot', False):
+                        self.logger.info(f"Skipping bot user without email: {user_data.get('name', 'unknown')}")
+                        continue
+                        
+                    # Add a unique identifier to empty emails to avoid conflicts
+                    if not user_data.get('email'):
+                        user_data['email'] = f"bot-{user_data.get('id')}@example.com"
+                        self.logger.info(f"Generated placeholder email for: {user_data.get('name')}")
+                    
                     # Check if user already exists
                     user = session.query(SlackUser).filter_by(id=user_data.get('id')).first()
                     
