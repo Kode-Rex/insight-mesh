@@ -21,23 +21,17 @@ class SlackPostgresService:
     
     def __init__(self):
         # Get connection parameters from environment variables with sensible defaults
-        pg_host = os.getenv("POSTGRES_HOST", "postgres")  # Default to service name in Docker
+        pg_host = os.getenv("POSTGRES_HOST", "insight_postgres")  # Point to our dedicated postgres
         pg_port = os.getenv("POSTGRES_PORT", "5432")
         pg_user = os.getenv("POSTGRES_USER", "postgres")
         pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
         pg_dbname = os.getenv("POSTGRES_DBNAME", "insight_mesh")
-        
-        # First connect to default postgres database to create our database if needed
-        self.admin_conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/postgres"
         
         # Connection string for our application database
         self.conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}"
         
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Connecting to PostgreSQL at {pg_host}:{pg_port}/{pg_dbname}")
-        
-        # Ensure database exists
-        self._ensure_database_exists(pg_dbname)
         
         # Initialize SQLAlchemy
         self.engine = create_engine(self.conn_string)
@@ -46,29 +40,6 @@ class SlackPostgresService:
         # Run migrations
         self._run_migrations()
 
-    def _ensure_database_exists(self, dbname):
-        """Create the database if it doesn't exist."""
-        try:
-            # Connect to default postgres database
-            with psycopg2.connect(self.admin_conn_string) as conn:
-                # Autocommit mode needed to create database
-                conn.autocommit = True
-                with conn.cursor() as cur:
-                    # Check if database exists
-                    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
-                    if cur.fetchone() is None:
-                        self.logger.info(f"Creating database {dbname}")
-                        # Database doesn't exist, create it
-                        # SQL string needs to be sanitized to prevent injection
-                        cur.execute(f"CREATE DATABASE {dbname.replace(' ', '_')}")
-                        self.logger.info(f"Database {dbname} created successfully")
-                    else:
-                        self.logger.info(f"Database {dbname} already exists")
-        except Exception as e:
-            self.logger.error(f"Error creating database: {e}")
-            # Don't raise here, we'll let the table creation try with existing setup
-            # which will fail appropriately if there's a real connection issue
-    
     def _run_migrations(self):
         """Run database migrations using Alembic."""
         try:
