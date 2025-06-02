@@ -137,41 +137,56 @@ class SlackPostgresService:
             session = self.Session()
             stored_count = 0
             
+            import datetime
+            import json
+            import copy
+            
             for channel_data in channels:
                 try:
+                    # Make a deep copy to avoid modifying the original data
+                    channel_for_db = copy.deepcopy(channel_data)
+                    
+                    # Convert Unix timestamp to datetime for database storage
+                    created_timestamp = None
+                    if 'created' in channel_for_db and channel_for_db['created'] and isinstance(channel_for_db['created'], int):
+                        created_timestamp = datetime.datetime.fromtimestamp(
+                            channel_for_db['created'], 
+                            tz=datetime.timezone.utc
+                        )
+                    
                     # Check if channel already exists
-                    channel = session.query(SlackChannel).filter_by(id=channel_data.get('id')).first()
+                    channel = session.query(SlackChannel).filter_by(id=channel_for_db.get('id')).first()
                     
                     if channel:
                         # Update existing channel
-                        channel.name = channel_data.get('name')
-                        channel.is_private = channel_data.get('is_private', False)
-                        channel.is_archived = channel_data.get('is_archived', False)
-                        channel.created = channel_data.get('created')
-                        channel.creator = channel_data.get('creator')
-                        channel.num_members = channel_data.get('num_members', 0)
-                        channel.purpose = channel_data.get('purpose', {}).get('value') if channel_data.get('purpose') else None
-                        channel.topic = channel_data.get('topic', {}).get('value') if channel_data.get('topic') else None
-                        channel.data = channel_data
+                        channel.name = channel_for_db.get('name')
+                        channel.is_private = channel_for_db.get('is_private', False)
+                        channel.is_archived = channel_for_db.get('is_archived', False)
+                        channel.created = created_timestamp  # Use the converted timestamp
+                        channel.creator = channel_for_db.get('creator')
+                        channel.num_members = channel_for_db.get('num_members', 0)
+                        channel.purpose = channel_for_db.get('purpose', {}).get('value') if channel_for_db.get('purpose') else None
+                        channel.topic = channel_for_db.get('topic', {}).get('value') if channel_for_db.get('topic') else None
+                        channel.data = channel_data  # Store original data for JSON
                     else:
                         # Create new channel
                         channel = SlackChannel(
-                            id=channel_data.get('id'),
-                            name=channel_data.get('name'),
-                            is_private=channel_data.get('is_private', False),
-                            is_archived=channel_data.get('is_archived', False),
-                            created=channel_data.get('created'),
-                            creator=channel_data.get('creator'),
-                            num_members=channel_data.get('num_members', 0),
-                            purpose=channel_data.get('purpose', {}).get('value') if channel_data.get('purpose') else None,
-                            topic=channel_data.get('topic', {}).get('value') if channel_data.get('topic') else None,
-                            data=channel_data
+                            id=channel_for_db.get('id'),
+                            name=channel_for_db.get('name'),
+                            is_private=channel_for_db.get('is_private', False),
+                            is_archived=channel_for_db.get('is_archived', False),
+                            created=created_timestamp,  # Use the converted timestamp
+                            creator=channel_for_db.get('creator'),
+                            num_members=channel_for_db.get('num_members', 0),
+                            purpose=channel_for_db.get('purpose', {}).get('value') if channel_for_db.get('purpose') else None,
+                            topic=channel_for_db.get('topic', {}).get('value') if channel_for_db.get('topic') else None,
+                            data=channel_data  # Store original data for JSON
                         )
                         session.add(channel)
                     
                     stored_count += 1
                 except Exception as e:
-                    self.logger.error(f"Error storing channel {channel_data.get('name')}: {e}")
+                    self.logger.error(f"Error storing channel {channel_for_db.get('name')}: {e}")
                     # Continue with next channel
             
             session.commit()
