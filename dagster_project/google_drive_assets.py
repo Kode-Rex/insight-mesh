@@ -23,10 +23,10 @@ from dagster import (
     AssetKey,
     EnvVar,
 )
-from .google_drive.utils import compute_hash
-from .google_drive.client import GoogleDriveClient
-from .google_drive.neo4j_service import Neo4jService
-from .google_drive.elastic_service import ElasticsearchService
+from google_drive.utils import compute_hash
+from google_drive.client import GoogleDriveClient
+from google_drive.neo4j_service import Neo4jService
+from google_drive.elastic_service import ElasticsearchService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -284,13 +284,15 @@ def list_shared_resources(service, context):
 
 
 @asset(group_name="company_doc_imports")
-def google_drive_files(context: AssetExecutionContext, config: GoogleDriveConfig):
+def google_drive_files(context: AssetExecutionContext, config: GoogleDriveConfig, google_drive_service):
     """Fetch files and folders from Google Drive folders with permissions using GoogleDriveClient."""
     client = GoogleDriveClient(config.credentials_file)
     all_files = []
     all_folders = []
     total_size = 0
     processed_file_ids = set()  # Track processed file IDs to prevent duplicates
+
+    context.log.info(f"Using Google Drive service with: {google_drive_service}")
 
     # List shared resources (sharedWithMe=true)
     shared_files = client.list_files(
@@ -465,7 +467,8 @@ def index_files(
 
 # Define jobs
 google_drive_indexing_job = define_asset_job(
-    name="google_drive_indexing_job", selection=[index_files]
+    name="google_drive_indexing_job", 
+    selection=[google_drive_service, google_drive_files, index_files]  # Include all assets in order
 )
 
 # Define schedules

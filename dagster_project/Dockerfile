@@ -3,21 +3,23 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the Dagster code
+# Copy the rest of the application
 COPY . .
+
+# Set environment variables
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Expose the port that dagster webserver will run on
 EXPOSE 3000
 
-# Start the dagster webserver with multiple job files
+# Run dagster webserver with all job files
 CMD ["dagster", "dev", "-h", "0.0.0.0", "-p", "3000", "-f", "google_drive_assets.py", "-f", "slack_job.py", "-f", "web_job.py"] 

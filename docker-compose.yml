@@ -174,6 +174,25 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Insight Mesh PostgreSQL Database
+  insight_postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=insight_mesh
+    ports:
+      - "5433:5432"  # Using a different port to avoid conflicts
+    volumes:
+      - insight_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   # Dagster service for data pipeline orchestration
   dagster:
     build:
@@ -188,12 +207,18 @@ services:
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=password
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - POSTGRES_HOST=insight_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DBNAME=insight_mesh
     volumes:
       - ./dagster_project:/app
       - ./credentials:/app/credentials
     depends_on:
       - elasticsearch
       - neo4j
+      - insight_postgres
     restart: unless-stopped
 
   mcp:
@@ -248,3 +273,4 @@ volumes:
   elasticsearch_data:
   neo4j_data:  # Persistent volume for Neo4j data
   neo4j_logs:  # Persistent volume for Neo4j logs
+  insight_postgres_data:  # Persistent volume for Insight Mesh PostgreSQL data
