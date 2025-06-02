@@ -82,14 +82,14 @@ def slack_channel_info(context: AssetExecutionContext) -> pd.DataFrame:
         raise
 
 @asset
-def scrape_slack_content(context: AssetExecutionContext, config: SlackConfig) -> Dict[str, Any]:
+def scrape_slack_content(context: AssetExecutionContext, config: SlackConfig, slack_channel_info: pd.DataFrame) -> Dict[str, Any]:
     """Scrape Slack content including messages, reactions, and files."""
     client = SlackClient()
     scraper = SlackScraper(client)
     try:
-        # Get all public channels
-        channels = client.get_public_channels()
-        context.log.info(f"Found {len(channels)} channels to scrape")
+        # Use the channels from slack_channel_info instead of fetching them again
+        channels = slack_channel_info.to_dict('records')
+        context.log.info(f"Using {len(channels)} channels from slack_channel_info to scrape")
         
         # Scrape each channel
         results = []
@@ -142,6 +142,12 @@ slack_channels_job = define_asset_job(
     selection=[scrape_slack_content]
 )
 
+# Define a comprehensive job that includes all assets
+slack_all_job = define_asset_job(
+    name="slack_all_job",
+    selection=[slack_users, slack_channel_info, scrape_slack_content]
+)
+
 # Define schedules
 slack_users_schedule = ScheduleDefinition(
     job=slack_users_job,
@@ -153,9 +159,15 @@ slack_channels_schedule = ScheduleDefinition(
     cron_schedule="0 */6 * * *",  # Run every 6 hours
 )
 
+# Schedule for the comprehensive job
+slack_all_schedule = ScheduleDefinition(
+    job=slack_all_job,
+    cron_schedule="0 */12 * * *",  # Run twice a day
+)
+
 # Create definitions object
 defs = Definitions(
     assets=[slack_users, slack_channel_info, scrape_slack_content],
-    schedules=[slack_users_schedule, slack_channels_schedule],
-    jobs=[slack_users_job, slack_channels_job],
+    schedules=[slack_users_schedule, slack_channels_schedule, slack_all_schedule],
+    jobs=[slack_users_job, slack_channels_job, slack_all_job],
 )

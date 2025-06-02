@@ -3,6 +3,14 @@ import os
 import psycopg2
 from psycopg2.extras import execute_values
 from typing import Dict, Any, List, Optional
+import subprocess
+from pathlib import Path
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from alembic.config import Config as AlembicConfig
+from alembic import command
+
+from slack.models import Base, SlackUser, SlackChannel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -12,127 +20,208 @@ class SlackPostgresService:
     """Service for handling PostgreSQL operations for Slack data."""
     
     def __init__(self):
-        self.conn_string = os.getenv(
-            "POSTGRES_CONNECTION_STRING", 
-            "postgresql://postgres:postgres@localhost:5432/insight_mesh"
-        )
+        # Get connection parameters from environment variables with sensible defaults
+        pg_host = os.getenv("POSTGRES_HOST", "postgres")  # Default to service name in Docker
+        pg_port = os.getenv("POSTGRES_PORT", "5432")
+        pg_user = os.getenv("POSTGRES_USER", "postgres")
+        pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+        pg_dbname = os.getenv("POSTGRES_DBNAME", "insight_mesh")
+        
+        # First connect to default postgres database to create our database if needed
+        self.admin_conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/postgres"
+        
+        # Connection string for our application database
+        self.conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}"
+        
         self.logger = logging.getLogger(__name__)
-        self._ensure_tables()
+        self.logger.info(f"Connecting to PostgreSQL at {pg_host}:{pg_port}/{pg_dbname}")
+        
+        # Ensure database exists
+        self._ensure_database_exists(pg_dbname)
+        
+        # Initialize SQLAlchemy
+        self.engine = create_engine(self.conn_string)
+        self.Session = sessionmaker(bind=self.engine)
+        
+        # Run migrations
+        self._run_migrations()
+
+    def _ensure_database_exists(self, dbname):
+        """Create the database if it doesn't exist."""
+        try:
+            # Connect to default postgres database
+            with psycopg2.connect(self.admin_conn_string) as conn:
+                # Autocommit mode needed to create database
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    # Check if database exists
+                    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+                    if cur.fetchone() is None:
+                        self.logger.info(f"Creating database {dbname}")
+                        # Database doesn't exist, create it
+                        # SQL string needs to be sanitized to prevent injection
+                        cur.execute(f"CREATE DATABASE {dbname.replace(' ', '_')}")
+                        self.logger.info(f"Database {dbname} created successfully")
+                    else:
+                        self.logger.info(f"Database {dbname} already exists")
+        except Exception as e:
+            self.logger.error(f"Error creating database: {e}")
+            # Don't raise here, we'll let the table creation try with existing setup
+            # which will fail appropriately if there's a real connection issue
+    
+    def _run_migrations(self):
+        """Run database migrations using Alembic."""
+        try:
+            self.logger.info("Running database migrations")
+            # Get the path to the alembic.ini file
+            alembic_ini_path = Path(__file__).parent.parent / "migrations" / "alembic.ini"
+            
+            # Create Alembic config
+            alembic_cfg = AlembicConfig(str(alembic_ini_path))
+            
+            # Override the sqlalchemy.url in the config
+            alembic_cfg.set_main_option("sqlalchemy.url", self.conn_string)
+            
+            # Run the migrations
+            command.upgrade(alembic_cfg, "head")
+            
+            self.logger.info("Database migrations completed successfully")
+        except Exception as e:
+            self.logger.error(f"Error running migrations: {e}")
+            raise
     
     def _get_connection(self):
-        """Get a connection to the PostgreSQL database."""
+        """Get a connection to the PostgreSQL database using psycopg2."""
         return psycopg2.connect(self.conn_string)
     
-    def _ensure_tables(self):
-        """Ensure that all required tables exist."""
-        try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cur:
-                    # Create users table
-                    cur.execute("""
-                    CREATE TABLE IF NOT EXISTS slack_users (
-                        id VARCHAR(255) PRIMARY KEY,
-                        name VARCHAR(255),
-                        real_name VARCHAR(255),
-                        display_name VARCHAR(255),
-                        email VARCHAR(255) UNIQUE,
-                        is_admin BOOLEAN,
-                        is_owner BOOLEAN,
-                        is_bot BOOLEAN,
-                        deleted BOOLEAN,
-                        team_id VARCHAR(255),
-                        data JSONB,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """)
-                    
-                    # Create index on email for faster lookups
-                    cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_slack_users_email ON slack_users(email);
-                    """)
-                    
-                    conn.commit()
-                    self.logger.info("Ensured PostgreSQL tables for Slack data")
-        except Exception as e:
-            self.logger.error(f"Error ensuring PostgreSQL tables: {e}")
-            raise
-    
     def store_users(self, users: List[Dict[str, Any]]):
-        """Store multiple Slack users in PostgreSQL."""
+        """Store multiple Slack users in PostgreSQL using SQLAlchemy."""
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cur:
-                    # Prepare data for batch insert
-                    columns = [
-                        'id', 'name', 'real_name', 'display_name', 'email', 
-                        'is_admin', 'is_owner', 'is_bot', 'deleted', 'team_id', 'data'
-                    ]
+            session = self.Session()
+            stored_count = 0
+            
+            for user_data in users:
+                try:
+                    # Check if user already exists
+                    user = session.query(SlackUser).filter_by(id=user_data.get('id')).first()
                     
-                    values = []
-                    for user in users:
-                        values.append((
-                            user.get('id'),
-                            user.get('name'),
-                            user.get('real_name'),
-                            user.get('display_name'),
-                            user.get('email'),
-                            user.get('is_admin', False),
-                            user.get('is_owner', False),
-                            user.get('is_bot', False),
-                            user.get('deleted', False),
-                            user.get('team_id'),
-                            psycopg2.extras.Json(user)
-                        ))
+                    if user:
+                        # Update existing user
+                        user.name = user_data.get('name')
+                        user.real_name = user_data.get('real_name')
+                        user.display_name = user_data.get('display_name')
+                        user.email = user_data.get('email')
+                        user.is_admin = user_data.get('is_admin', False)
+                        user.is_owner = user_data.get('is_owner', False)
+                        user.is_bot = user_data.get('is_bot', False)
+                        user.deleted = user_data.get('deleted', False)
+                        user.team_id = user_data.get('team_id')
+                        user.data = user_data
+                    else:
+                        # Create new user
+                        user = SlackUser(
+                            id=user_data.get('id'),
+                            name=user_data.get('name'),
+                            real_name=user_data.get('real_name'),
+                            display_name=user_data.get('display_name'),
+                            email=user_data.get('email'),
+                            is_admin=user_data.get('is_admin', False),
+                            is_owner=user_data.get('is_owner', False),
+                            is_bot=user_data.get('is_bot', False),
+                            deleted=user_data.get('deleted', False),
+                            team_id=user_data.get('team_id'),
+                            data=user_data
+                        )
+                        session.add(user)
                     
-                    # Perform upsert - update existing users, insert new ones
-                    query = f"""
-                    INSERT INTO slack_users ({', '.join(columns)})
-                    VALUES %s
-                    ON CONFLICT (id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        real_name = EXCLUDED.real_name,
-                        display_name = EXCLUDED.display_name,
-                        email = EXCLUDED.email,
-                        is_admin = EXCLUDED.is_admin,
-                        is_owner = EXCLUDED.is_owner,
-                        is_bot = EXCLUDED.is_bot,
-                        deleted = EXCLUDED.deleted,
-                        team_id = EXCLUDED.team_id,
-                        data = EXCLUDED.data,
-                        updated_at = CURRENT_TIMESTAMP
-                    """
-                    
-                    execute_values(cur, query, values)
-                    conn.commit()
-                    self.logger.info(f"Stored {len(users)} users in PostgreSQL")
+                    stored_count += 1
+                except Exception as e:
+                    self.logger.error(f"Error storing user {user_data.get('name')}: {e}")
+                    # Continue with next user
+            
+            session.commit()
+            self.logger.info(f"Stored {stored_count} users in PostgreSQL")
+            
         except Exception as e:
             self.logger.error(f"Error storing users in PostgreSQL: {e}")
+            session.rollback()
             raise
+        finally:
+            session.close()
+    
+    def store_channels(self, channels: List[Dict[str, Any]]):
+        """Store multiple Slack channels in PostgreSQL using SQLAlchemy."""
+        try:
+            session = self.Session()
+            stored_count = 0
+            
+            for channel_data in channels:
+                try:
+                    # Check if channel already exists
+                    channel = session.query(SlackChannel).filter_by(id=channel_data.get('id')).first()
+                    
+                    if channel:
+                        # Update existing channel
+                        channel.name = channel_data.get('name')
+                        channel.is_private = channel_data.get('is_private', False)
+                        channel.is_archived = channel_data.get('is_archived', False)
+                        channel.created = channel_data.get('created')
+                        channel.creator = channel_data.get('creator')
+                        channel.num_members = channel_data.get('num_members', 0)
+                        channel.purpose = channel_data.get('purpose', {}).get('value') if channel_data.get('purpose') else None
+                        channel.topic = channel_data.get('topic', {}).get('value') if channel_data.get('topic') else None
+                        channel.data = channel_data
+                    else:
+                        # Create new channel
+                        channel = SlackChannel(
+                            id=channel_data.get('id'),
+                            name=channel_data.get('name'),
+                            is_private=channel_data.get('is_private', False),
+                            is_archived=channel_data.get('is_archived', False),
+                            created=channel_data.get('created'),
+                            creator=channel_data.get('creator'),
+                            num_members=channel_data.get('num_members', 0),
+                            purpose=channel_data.get('purpose', {}).get('value') if channel_data.get('purpose') else None,
+                            topic=channel_data.get('topic', {}).get('value') if channel_data.get('topic') else None,
+                            data=channel_data
+                        )
+                        session.add(channel)
+                    
+                    stored_count += 1
+                except Exception as e:
+                    self.logger.error(f"Error storing channel {channel_data.get('name')}: {e}")
+                    # Continue with next channel
+            
+            session.commit()
+            self.logger.info(f"Stored {stored_count} channels in PostgreSQL")
+            
+        except Exception as e:
+            self.logger.error(f"Error storing channels in PostgreSQL: {e}")
+            session.rollback()
+            raise
+        finally:
+            session.close()
     
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        """Get a user by email."""
+        """Get a user by email using SQLAlchemy."""
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT data FROM slack_users WHERE email = %s",
-                        (email,)
-                    )
-                    result = cur.fetchone()
-                    return result[0] if result else None
+            session = self.Session()
+            user = session.query(SlackUser).filter_by(email=email).first()
+            return user.data if user else None
         except Exception as e:
             self.logger.error(f"Error getting user by email from PostgreSQL: {e}")
             raise
+        finally:
+            session.close()
     
     def get_all_users(self) -> List[Dict[str, Any]]:
-        """Get all users."""
+        """Get all users using SQLAlchemy."""
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT data FROM slack_users")
-                    results = cur.fetchall()
-                    return [row[0] for row in results]
+            session = self.Session()
+            users = session.query(SlackUser).all()
+            return [user.data for user in users]
         except Exception as e:
             self.logger.error(f"Error getting all users from PostgreSQL: {e}")
-            raise 
+            raise
+        finally:
+            session.close() 
