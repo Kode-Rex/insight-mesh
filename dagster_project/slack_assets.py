@@ -57,6 +57,31 @@ def slack_users(context: AssetExecutionContext) -> pd.DataFrame:
         raise
 
 @asset
+def slack_channel_info(context: AssetExecutionContext) -> pd.DataFrame:
+    """Get all Slack channels and their information and store in PostgreSQL."""
+    client = SlackClient()
+    try:
+        # Get all public channels
+        channels = client.get_public_channels()
+        context.log.info(f"Found {len(channels)} channels")
+        
+        # Store channel info in PostgreSQL
+        pg_service = SlackPostgresService()
+        pg_service.store_channels(channels)
+        context.log.info(f"Stored {len(channels)} channels in PostgreSQL")
+        
+        # Create DataFrame for channel info
+        df = pd.DataFrame(channels)
+        context.add_output_metadata({
+            "num_channels": len(channels),
+            "preview": MetadataValue.json(df.head().to_dict(orient="records"))
+        })
+        return df
+    except Exception as e:
+        context.log.error(f"Error getting channel info: {e}")
+        raise
+
+@asset
 def scrape_slack_content(context: AssetExecutionContext, config: SlackConfig) -> Dict[str, Any]:
     """Scrape Slack content including messages, reactions, and files."""
     client = SlackClient()
@@ -130,7 +155,7 @@ slack_channels_schedule = ScheduleDefinition(
 
 # Create definitions object
 defs = Definitions(
-    assets=[slack_users, scrape_slack_content],
+    assets=[slack_users, slack_channel_info, scrape_slack_content],
     schedules=[slack_users_schedule, slack_channels_schedule],
     jobs=[slack_users_job, slack_channels_job],
 )
