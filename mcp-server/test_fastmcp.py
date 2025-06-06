@@ -87,6 +87,9 @@ async def test_get_context():
         assert len(result["context_items"]) == 1
 
 # Function to test actual HTTP endpoints when run directly
+# Mark as an integration test so it doesn't run by default
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_live_fastmcp_endpoints():
     """Test the FastMCP HTTP endpoints with a live server"""
     # Get MCP server port from environment, default to 9091
