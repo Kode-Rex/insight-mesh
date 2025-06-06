@@ -4,19 +4,19 @@
         "caddy": {
             "display_name": "Caddy",
             "description": "Web server and reverse proxy",
-            "images": ["caddy:"],
+            "images": ["caddy:2.7.4"],
             "container_patterns": ["caddy"]
         },
-        "openwebui": {
+        "webui": {
             "display_name": "OpenWebUI",
             "description": "Web interface for LLMs",
-            "images": ["openwebui/openwebui", "tmfrisinger/open-webui"],
+            "images": ["tmfrisinger/open-webui:1.0.1"],
             "container_patterns": ["openwebui"]
         },
         "litellm": {
             "display_name": "LiteLLM",
             "description": "LLM proxy service",
-            "images": ["ghcr.io/berriai/litellm"],
+            "images": ["ghcr.io/berriai/litellm:main-latest"],
             "container_patterns": ["litellm"]
         },
         "slack-bot": {
@@ -33,8 +33,8 @@
         },
         "mcp-server": {
             "display_name": "MCP Server",
-            "description": "MCP API server",
-            "images": ["mcp-server"],
+            "description": "Project MCP server",
+            "images": ["mcp"],
             "container_patterns": ["mcp"]
         },
         "postgres-dagster": {
@@ -64,25 +64,25 @@
         "redis": {
             "display_name": "Redis",
             "description": "In-memory cache",
-            "images": ["redis:"],
+            "images": ["redis:7-alpine"],
             "container_patterns": ["redis"]
         },
         "elasticsearch": {
             "display_name": "Elasticsearch",
             "description": "Search and analytics engine",
-            "images": ["elasticsearch:"],
+            "images": ["docker.elastic.co/elasticsearch/elasticsearch:8.10.4"],
             "container_patterns": ["elastic"]
         },
-        "webcatalog": {
+        "webcat": {
             "display_name": "Web Search",
             "description": "Search search service",
-            "images": ["webcat", "tmfrisinger/webcat:latest"],
+            "images": ["tmfrisinger/webcat:latest"],
             "container_patterns": ["webcat"]
         },
         "neo4j": {
             "display_name": "Neo4j",
             "description": "Graph database",
-            "images": ["neo4j:"],
+            "images": ["neo4j:5.13.0"],
             "container_patterns": ["neo4j"]
         }
     }
