@@ -185,9 +185,9 @@ async def test_get_context_implementation():
                 return response
                 
             except ValueError as e:
-                raise ValueError(str(e))
+                raise ValueError(str(e)) from e
             except Exception as e:
-                raise Exception(f"Error in test implementation: {str(e)}")
+                raise Exception(f"Error in test implementation: {str(e)}") from e
         
         # Call our implementation
         result = await legacy_context_endpoint(request)
