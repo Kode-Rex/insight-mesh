@@ -125,10 +125,10 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
         logger.info("Token validation successful")
     except jwt.InvalidTokenError as e:
         logger.error(f"Invalid token error: {str(e)}")
-        raise ValueError(f"Invalid token: {str(e)}")
+        raise ValueError(f"Invalid token: {str(e)}") from e
     except Exception as e:
         logger.error(f"Error validating token: {str(e)}", exc_info=True)
-        raise ValueError("Error processing token")
+        raise ValueError("Error processing token") from e
 
 # FastAPI API key verification
 async def verify_api_key(x_api_key: str = Header(...)) -> None:
