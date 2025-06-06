@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-import json
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, UTC
 
 # Import models and utilities
