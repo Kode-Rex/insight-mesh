@@ -94,5 +94,19 @@
             "description": "Search the web",
             "permissions": ["*", "tmfrisinger@gmail.com"]
         }
+    },
+    "frameworks": {
+        "postgres": {
+            "type": "sql",
+            "migration_tool": "alembic"
+        },
+        "neo4j": {
+            "type": "graph",
+            "migration_tool": "cypher"
+        },
+        "elasticsearch": {
+            "type": "search",
+            "migration_tool": "index_settings"
+        }
     }
 }
