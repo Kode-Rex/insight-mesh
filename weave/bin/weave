@@ -364,6 +364,9 @@ def extract_urls(ports_string):
                 host_part = port_mapping.split('->')[0].strip()
                 if ':' in host_part:
                     host, port = host_part.split(':')
+                    # Replace 0.0.0.0 with localhost
+                    if host == '0.0.0.0':
+                        host = 'localhost'
                     urls.append(f"http://{host}:{port}")
                 else:
                     port = host_part
@@ -501,16 +504,14 @@ def service_list(ctx, project_prefix, debug):
 
 @service_group.command('open')
 @click.argument('service_identifier')
-@click.option('--project-prefix', '-p', help='Project prefix for filtering services')
 @click.pass_context
-def service_open(ctx, service_identifier, project_prefix):
-    """Open a service URL in the default browser.
-    service_identifier can be a service name, display name, or container name."""
-    prefix = project_prefix or PROJECT_NAME
+def service_open(ctx, service_identifier):
+    """Open a service in the browser"""
+    prefix = PROJECT_NAME
+    verbose = ctx.obj.get('VERBOSE', False)
     
     # Get running containers with the project prefix
     command = f"docker ps --format '{{{{.ID}}}}|{{{{.Names}}}}|{{{{.Ports}}}}|{{{{.Image}}}}' | grep {prefix}"
-    verbose = ctx.obj.get('VERBOSE', False)
     
     if verbose:
         console.print(f"[bold blue]Running:[/bold blue] {command}")
@@ -521,18 +522,22 @@ def service_open(ctx, service_identifier, project_prefix):
         console.print(f"[bold red]Error:[/bold red] {result.stderr}")
         return
     
-    # Parse all running containers
+    # Parse containers and group by service
     running_containers = []
+    
     for line in result.stdout.strip().split('\n'):
         if not line:
             continue
+        
         parts = line.split('|')
         if len(parts) >= 4:
             container_id, container_name, ports, image = parts[0], parts[1], parts[2], parts[3]
+            
+            # Get service info
             service_id, service_info = get_service_for_container(container_name, image)
             
             running_containers.append({
-                'id': container_id,
+                'container_id': container_id,
                 'name': container_name,
                 'ports': ports,
                 'image': image,
@@ -596,13 +601,15 @@ def service_open(ctx, service_identifier, project_prefix):
                                                          container_with_urls['service_id'] or 
                                                          container_with_urls['name'])
     
-    # Open in browser
+    # Open the first URL in a browser
     url = container_with_urls['urls'][0]
-    try:
-        webbrowser.open(url)
-        console.print(f"[green]Opened {display_name} in default browser: {url}[/green]")
-    except Exception as e:
-        console.print(f"[red]Error opening URL {url}: {str(e)}[/red]")
+    
+    # Ensure the URL uses localhost instead of 0.0.0.0
+    if '0.0.0.0' in url:
+        url = url.replace('0.0.0.0', 'localhost')
+    
+    webbrowser.open(url)
+    console.print(f"Opened {display_name} in default browser: {url}")
 
 def main():
     cli(obj={})
