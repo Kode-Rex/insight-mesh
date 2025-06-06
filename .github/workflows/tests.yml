@@ -13,6 +13,7 @@ jobs:
     env:
       SLACK_BOT_TOKEN: xoxb-test-token
       SLACK_APP_TOKEN: xapp-test-token
+      SLACK_BOT_ID: B12345678
       LLM_API_URL: http://localhost:4000/v1
       LLM_API_KEY: test-api-key
       LLM_MODEL: gpt-4.0o-mini
@@ -135,6 +136,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-asyncio pytest-cov dagster dagster-webserver
+        
+    - name: Create mock credentials
+      working-directory: ./dagster_project
+      run: |
+        echo '{"type": "service_account", "project_id": "mock-project", "private_key_id": "mock", "private_key": "mock", "client_email": "mock@example.com", "client_id": "mock", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/mock"}' > mock_credentials.json
         
     - name: Run Dagster tests
       working-directory: ./dagster_project

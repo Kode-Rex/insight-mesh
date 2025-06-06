@@ -60,24 +60,27 @@ async def get_context_from_mcp(
     if not api_key or not auth_token or not prompt:
         return None
         
-    headers = {
-        "x-api-key": api_key,
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "auth_token": auth_token,
-        "token_type": token_type,
-        "prompt": prompt,
-        "history_summary": history_summary
-    }
-    
     close_session = False
     if session is None:
         session = aiohttp.ClientSession()
         close_session = True
-        
+    
     try:
+        # Use the legacy REST API endpoint directly
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        payload = {
+            "auth_token": auth_token,
+            "token_type": token_type,
+            "prompt": prompt,
+            "history_summary": history_summary
+        }
+        
+        logger.info(f"Calling MCP context endpoint: {MCP_SERVER_URL}/context")
         async with session.post(
             f"{MCP_SERVER_URL}/context",
             headers=headers,
