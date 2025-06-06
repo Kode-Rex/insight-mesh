@@ -261,6 +261,11 @@ def health_check() -> Dict[str, str]:
     """Health check endpoint"""
     return {"status": "healthy"}
 
+# Direct function that can be called in tests
+def health_check_direct() -> Dict[str, str]:
+    """Health check function for direct calls in tests"""
+    return {"status": "healthy"}
+
 @mcp.resource("system://about")
 def system_info() -> str:
     """Get information about the MCP server"""

@@ -7,23 +7,26 @@ from datetime import datetime, UTC
 # Import models and utilities
 from main import (
     validate_token,
-    ContextRequest,
-    ContextResponse,
+    _process_context_request,
+    mcp,
+    health_check_direct
+)
+from models import (
     ContextItem,
     ContextSource,
     RetrievalMetadata,
     ResponseMetadata,
-    UserInfo
+    UserInfo,
+    ContextRequest,
+    ContextResponse
 )
 from context_service import ContextResult, DocumentResult
 
 @pytest.mark.asyncio
 async def test_health_check():
     """Test the health check endpoint directly"""
-    from main import health_check_endpoint
-    
-    # Call the health check endpoint function (it's async)
-    response = await health_check_endpoint()
+    # Call the actual function (not the FastMCP tool wrapper)
+    response = health_check_direct()
     
     # Verify the response
     assert response == {"status": "healthy"}
@@ -118,96 +121,32 @@ async def test_get_context_implementation():
         # Configure the mock to return our predefined result
         mock_get_context.return_value = mock_result
         
-        # Create a test request
-        request = ContextRequest(
+        # Test the _process_context_request function directly
+        result = await _process_context_request(
             auth_token="default_token",
             token_type="OpenWebUI",
             prompt="Test prompt",
             history_summary="Test history"
         )
         
-        # Define a simple implementation based on the actual endpoint logic
-        async def legacy_context_endpoint(request):
-            try:
-                # Validate the token and get user info
-                user_info = await validate_token(request.auth_token, request.token_type)
-                user_id = user_info.id
-                
-                # Get context for the prompt using ContextService
-                from main import context_service
-                context_result = await context_service.get_context_for_prompt(
-                    user_id=user_id,
-                    prompt=request.prompt,
-                    history_summary=request.history_summary,
-                    user_info=user_info
-                )
-                
-                # Convert document results to context items
-                context_items = [
-                    ContextItem(
-                        content=doc.content,
-                        role="system",
-                        metadata={
-                            "source": doc.source,
-                            "document_id": doc.metadata.get("id"),
-                            "url": doc.metadata.get("url"),
-                            "file_name": doc.metadata.get("file_name"),
-                            "created_time": doc.metadata.get("created_time"),
-                            "modified_time": doc.metadata.get("modified_time"),
-                            "relevance_score": doc.metadata.get("score"),
-                            "source_type": doc.metadata.get("source_type")
-                        }
-                    )
-                    for doc in context_result.documents
-                ]
-                
-                # Create response metadata
-                response_metadata = ResponseMetadata(
-                    user=user_info,
-                    token_type=request.token_type,
-                    timestamp=datetime.now(UTC).isoformat(),
-                    context_sources=[
-                        ContextSource(type="documents", count=len(context_result.documents))
-                    ],
-                    retrieval_metadata=RetrievalMetadata(
-                        cache_hit=context_result.cache_hit,
-                        retrieval_time_ms=context_result.retrieval_time_ms
-                    )
-                )
-                
-                # Create and return the response
-                response = ContextResponse(
-                    context_items=context_items,
-                    metadata=response_metadata
-                )
-                
-                return response
-                
-            except ValueError as e:
-                raise ValueError(str(e)) from e
-            except Exception as e:
-                raise Exception(f"Error in test implementation: {str(e)}") from e
-        
-        # Call our implementation
-        result = await legacy_context_endpoint(request)
-        
-        # Verify the result structure - there should be 4 context items now
-        assert len(result.context_items) == 4
+        # Verify the result structure
+        assert "context_items" in result
+        assert len(result["context_items"]) == 4
         
         # Verify the first context item structure
-        context_item = result.context_items[0]
+        context_item = ContextItem(**result["context_items"][0])
         assert context_item.content == "Test document content 1"
         assert context_item.role == "system"
         assert context_item.metadata["source"] == "test_source"
         assert context_item.metadata["document_id"] == "doc123"
         
         # Verify the second context item
-        context_item = result.context_items[1]
+        context_item = ContextItem(**result["context_items"][1])
         assert context_item.content == "Test document content 2"
         assert context_item.metadata["document_id"] == "doc456"
         
         # Verify metadata
-        metadata = result.metadata
+        metadata = ResponseMetadata(**result["metadata"])
         assert metadata.token_type == "OpenWebUI"
         assert metadata.user.id == "default_user"
         assert metadata.retrieval_metadata.cache_hit is False
