@@ -28,7 +28,7 @@ PROJECT_NAME = get_project_name()
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.pass_context
 def cli(ctx, verbose):
-    """Weaver: A simple tool to manage Insight Mesh services"""
+    """Weaver: A Rails-like framework for rapidly building and deploying enterprise-grade GenAI applications."""
     ctx.ensure_object(dict)
     ctx.obj['VERBOSE'] = verbose
 
