@@ -114,8 +114,21 @@ def get_service_for_container(container_name, image_name):
     config = get_config()
     services = config.get("services", {})
     
+    # Special case for postgres containers - match them exactly
+    if "postgres" in container_name:
+        for service_id, service_info in services.items():
+            if service_id.startswith("postgres-"):
+                container_patterns = service_info.get("container_patterns", [])
+                for pattern in container_patterns:
+                    if pattern in container_name:
+                        return service_id, service_info
+    
     # For each service, check if the container name or image matches any patterns
     for service_id, service_info in services.items():
+        # Skip postgres services for non-postgres containers
+        if service_id.startswith("postgres-") and "postgres" not in container_name:
+            continue
+            
         # Check container name patterns
         container_patterns = service_info.get("container_patterns", [])
         for pattern in container_patterns:

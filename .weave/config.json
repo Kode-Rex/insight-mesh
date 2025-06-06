@@ -37,11 +37,29 @@
             "images": ["mcp-server"],
             "container_patterns": ["mcp"]
         },
-        "postgres": {
-            "display_name": "PostgreSQL",
-            "description": "Database server",
-            "images": ["postgres:"],
-            "container_patterns": ["postgres"]
+        "postgres-dagster": {
+            "display_name": "Dagster DB",
+            "description": "Dagster database",
+            "images": ["postgres:14"],
+            "container_patterns": ["postgres_dagster-"]
+        },
+        "postgres-mcp": {
+            "display_name": "MCP DB",
+            "description": "MCP database",
+            "images": ["postgres:14"],
+            "container_patterns": ["postgres_mcp-"]
+        },
+        "postgres-openwebui": {
+            "display_name": "OpenWebUI DB",
+            "description": "OpenWebUI database",
+            "images": ["postgres:14"],
+            "container_patterns": ["postgres_openwebui-"]
+        },
+        "postgres-litellm": {
+            "display_name": "LiteLLM DB",
+            "description": "LiteLLM database",
+            "images": ["postgres:14"],
+            "container_patterns": ["postgres_litellm-"]
         },
         "redis": {
             "display_name": "Redis",
@@ -58,7 +76,7 @@
         "webcatalog": {
             "display_name": "Web Search",
             "description": "Search search service",
-            "images": ["webcat", "tmfrisinger/webcat:lastest"],
+            "images": ["webcat", "tmfrisinger/webcat:latest"],
             "container_patterns": ["webcat"]
         },
         "neo4j": {
