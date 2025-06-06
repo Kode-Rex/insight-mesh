@@ -1,0 +1,102 @@
+#!/bin/bash
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}Installing Weaver...${NC}"
+
+# Find python - try python3, then python
+if command -v python3 &> /dev/null; then
+    PYTHON="python3"
+elif command -v python &> /dev/null; then
+    PYTHON="python"
+else
+    echo -e "${RED}Error: Python is not installed. Please install Python 3.11 first.${NC}"
+    exit 1
+fi
+
+# Find pip - try pip3, then pip
+if command -v pip3 &> /dev/null; then
+    PIP="pip3"
+elif command -v pip &> /dev/null; then
+    PIP="pip"
+else
+    echo -e "${RED}Error: pip is not installed. Please install pip first.${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Using Python: $PYTHON${NC}"
+echo -e "${YELLOW}Using Pip: $PIP${NC}"
+
+# Detect Python version
+PYTHON_VERSION=$($PYTHON --version | awk '{print $2}')
+echo -e "${YELLOW}Python version: $PYTHON_VERSION${NC}"
+
+# Create a virtual environment
+if [ ! -d "venv" ]; then
+    echo -e "${YELLOW}Creating virtual environment...${NC}"
+    $PYTHON -m venv venv
+fi
+
+# Activate virtual environment
+echo -e "${YELLOW}Activating virtual environment...${NC}"
+source venv/bin/activate
+
+# Install requirements
+echo -e "${YELLOW}Installing dependencies...${NC}"
+pip install -r requirements.txt
+
+# Make the script executable
+echo -e "${YELLOW}Making script executable...${NC}"
+chmod +x bin/weaver
+
+# Create symlink for easy access
+SYMLINK_PATH="$HOME/.local/bin/weaver"
+mkdir -p "$HOME/.local/bin"
+
+echo -e "${YELLOW}Creating symlink to $SYMLINK_PATH...${NC}"
+ln -sf "$(pwd)/bin/weaver" "$SYMLINK_PATH"
+
+# Update PATH if needed
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo -e "${YELLOW}Adding ~/.local/bin to PATH...${NC}"
+    export PATH="$HOME/.local/bin:$PATH"
+    
+    # Add to shell profile files if they exist
+    for PROFILE in ~/.bash_profile ~/.bashrc ~/.zshrc; do
+        if [ -f "$PROFILE" ]; then
+            if ! grep -q "export PATH=\"\$HOME/.local/bin:\$PATH\"" "$PROFILE"; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$PROFILE"
+                echo -e "${YELLOW}Added PATH to $PROFILE${NC}"
+            fi
+        fi
+    done
+fi
+
+# Create a wrapper script that activates the virtual environment
+WRAPPER_PATH="$HOME/.local/bin/weaver"
+cat > "$WRAPPER_PATH" <<EOL
+#!/bin/bash
+# Wrapper script for weaver that activates the virtual environment
+
+# Activate the virtual environment
+source "$(pwd)/venv/bin/activate"
+
+# Run the actual weaver command
+"$(pwd)/bin/weaver" "\$@"
+EOL
+
+chmod +x "$WRAPPER_PATH"
+
+echo -e "${GREEN}Weaver has been installed!${NC}"
+echo -e "${BLUE}You can now use 'weaver' command from anywhere.${NC}"
+
+# Show a test command
+echo -e "${YELLOW}Try running this command to verify installation:${NC}"
+echo -e "${BLUE}weaver --help${NC}" 

@@ -21,7 +21,7 @@ class SlackPostgresService:
     
     def __init__(self):
         # Get connection parameters from environment variables with sensible defaults
-        pg_host = os.getenv("POSTGRES_HOST", "insight_postgres")  # Point to our dedicated postgres
+        pg_host = os.getenv("POSTGRES_HOST", "postgres_dagster")  # Point to our dedicated postgres
         pg_port = os.getenv("POSTGRES_PORT", "5432")
         pg_user = os.getenv("POSTGRES_USER", "postgres")
         pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
