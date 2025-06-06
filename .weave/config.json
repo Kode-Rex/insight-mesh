@@ -1,5 +1,6 @@
 {
     "project_name": "insight-mesh",
+    "description": "Delivering AI solutions directly into enterprise workflows—no extra tabs required.",
     "services": {
         "caddy": {
             "display_name": "Caddy",
@@ -84,6 +85,14 @@
             "description": "Graph database",
             "images": ["neo4j:5.13.0"],
             "container_patterns": ["neo4j"]
+        }
+    },
+    "tools":{
+        "webcat": {
+            "service": "webcat",
+            "url": "TODO : look this up as per the `service list` command",
+            "description": "Search the web",
+            "permissions": ["*", "tmfrisinger@gmail.com"]
         }
     }
 }
