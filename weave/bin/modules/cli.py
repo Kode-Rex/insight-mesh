@@ -212,22 +212,6 @@ def status(ctx):
             console.print("[yellow]Showing raw output:[/yellow]")
             console.print(result.stdout)
 
-@cli.command('config')
-@click.pass_context
-def config(ctx):
-    """Show the Docker Compose configuration"""
-    command = ['docker', 'compose', '-p', PROJECT_NAME, 'config']
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    with console.status("[bold blue]Fetching configuration...", spinner="dots"):
-        result = subprocess.run(command, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
-            return
-        
-        console.print(result.stdout)
-
 @cli.group('service')
 @click.pass_context
 def service_group(ctx):
