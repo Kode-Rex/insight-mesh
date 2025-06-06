@@ -13,6 +13,7 @@ jobs:
     env:
       SLACK_BOT_TOKEN: xoxb-test-token
       SLACK_APP_TOKEN: xapp-test-token
+      SLACK_BOT_ID: B12345678
       LLM_API_URL: http://localhost:4000/v1
       LLM_API_KEY: test-api-key
       LLM_MODEL: gpt-4.0o-mini

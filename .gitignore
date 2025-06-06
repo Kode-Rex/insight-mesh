@@ -187,3 +187,4 @@ google_drive_service
 index_files
 venv311/
 dagster_project/dagster_venv/
+slack-bot/slackbot_venv/
