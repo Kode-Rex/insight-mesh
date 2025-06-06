@@ -12,7 +12,7 @@ from rich import print as rprint
 from dotenv import load_dotenv
 from pathlib import Path
 
-from .config import get_project_name
+from .config import get_project_name, get_docker_service_name, get_service_id_for_docker_service
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
 
@@ -28,7 +28,7 @@ PROJECT_NAME = get_project_name()
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.pass_context
 def cli(ctx, verbose):
-    """Weaver: A simple tool to manage Insight Mesh services"""
+    """Weaver: A Rails-like framework for rapidly building and deploying enterprise-grade GenAI applications."""
     ctx.ensure_object(dict)
     ctx.obj['VERBOSE'] = verbose
 
@@ -44,7 +44,9 @@ def up(ctx, detach, service):
         command.append('-d')
         
     if service:
-        command.extend(service)
+        # Convert service IDs from config to docker service names
+        docker_services = [get_docker_service_name(s, PROJECT_NAME) for s in service]
+        command.extend(docker_services)
         
     verbose = ctx.obj.get('VERBOSE', False)
     
@@ -75,22 +77,6 @@ def down(ctx, volumes, remove_orphans):
         if run_command(command, verbose):
             console.print("[bold green]Services stopped successfully[/bold green]")
 
-@cli.command('ps')
-@click.pass_context
-def ps(ctx):
-    """List running services"""
-    command = ['docker', 'compose', '-p', PROJECT_NAME, 'ps']
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    with console.status("[bold blue]Fetching service status...", spinner="dots"):
-        result = subprocess.run(command, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
-            return
-        
-        console.print(result.stdout)
-
 @cli.command('logs')
 @click.option('--follow', '-f', is_flag=True, help='Follow logs')
 @click.option('--tail', '-n', default=100, help='Number of lines to show')
@@ -115,6 +101,9 @@ def logs(ctx, follow, tail, service, verbose):
         get_rag_logs(PROJECT_NAME, follow, tail, is_verbose, not verbose)
         return
     
+    # Convert service ID from config to docker service name if needed
+    docker_service = get_docker_service_name(service, PROJECT_NAME) if service else None
+    
     # Standard Docker Compose logs command
     command = ['docker', 'compose', '-p', PROJECT_NAME, 'logs']
     
@@ -123,8 +112,8 @@ def logs(ctx, follow, tail, service, verbose):
         
     command.extend(['--tail', str(tail)])
     
-    if service:
-        command.append(service)
+    if docker_service:
+        command.append(docker_service)
     
     if is_verbose:
         console.print(f"[bold blue]Running:[/bold blue] {' '.join(command)}")
@@ -138,8 +127,10 @@ def restart(ctx, service):
     """Restart services"""
     command = ['docker', 'compose', '-p', PROJECT_NAME, 'restart']
     
+    # Convert service ID from config to docker service name if needed
     if service:
-        command.append(service)
+        docker_service = get_docker_service_name(service, PROJECT_NAME)
+        command.append(docker_service)
         
     verbose = ctx.obj.get('VERBOSE', False)
     
@@ -175,23 +166,41 @@ def status(ctx):
             if not services:
                 console.print("[yellow]No running services found[/yellow]")
                 return
+            
+            # Get the config to map services
+            from .config import get_config
+            config = get_config()
+            config_services = config.get("services", {})
+            
+            # Create a mapping from container patterns to service keys
+            container_pattern_to_service_key = {}
+            for service_key, service_info in config_services.items():
+                for pattern in service_info.get("container_patterns", []):
+                    container_pattern_to_service_key[pattern] = service_key
                 
-            table = Table(title="Insight Mesh Services")
+            table = Table(title="Project Services")
             table.add_column("Service", style="cyan")
-            table.add_column("Name", style="blue")
+            table.add_column("Docker Service", style="blue")
             table.add_column("Status", style="green")
             table.add_column("Ports", style="yellow")
             
             for service in services:
-                name = service.get('Name', 'Unknown')
-                service_name = service.get('Service', 'Unknown')
+                docker_service_name = service.get('Service', 'Unknown')
+                container_name = service.get('Name', 'Unknown')
                 status = service.get('Status', 'Unknown')
                 ports = service.get('Ports', '')
                 
+                # Find the service key that matches this Docker service
+                service_key = docker_service_name
+                for pattern, key in container_pattern_to_service_key.items():
+                    if pattern in docker_service_name:
+                        service_key = key
+                        break
+                
                 status_style = "green" if "Up" in status and "unhealthy" not in status else "red"
                 table.add_row(
-                    service_name,
-                    name,
+                    service_key,
+                    container_name,
                     f"[{status_style}]{status}[/{status_style}]",
                     ports
                 )

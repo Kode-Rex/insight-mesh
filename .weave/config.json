@@ -1,5 +1,6 @@
 {
     "project_name": "insight-mesh",
+    "description": "Delivering AI solutions directly into enterprise workflows—no extra tabs required.",
     "services": {
         "caddy": {
             "display_name": "Caddy",
@@ -31,31 +32,31 @@
             "images": ["dagster"],
             "container_patterns": ["dagster"]
         },
-        "mcp-server": {
+        "mcp": {
             "display_name": "MCP Server",
             "description": "Project MCP server",
             "images": ["mcp"],
             "container_patterns": ["mcp"]
         },
-        "postgres-dagster": {
+        "dagster-db": {
             "display_name": "Dagster DB",
             "description": "Dagster database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_dagster-"]
         },
-        "postgres-mcp": {
+        "mcp-db": {
             "display_name": "MCP DB",
             "description": "MCP database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_mcp-"]
         },
-        "postgres-openwebui": {
+        "openwebui-db": {
             "display_name": "OpenWebUI DB",
             "description": "OpenWebUI database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_openwebui-"]
         },
-        "postgres-litellm": {
+        "litellm-db": {
             "display_name": "LiteLLM DB",
             "description": "LiteLLM database",
             "images": ["postgres:14"],
@@ -84,6 +85,28 @@
             "description": "Graph database",
             "images": ["neo4j:5.13.0"],
             "container_patterns": ["neo4j"]
+        }
+    },
+    "tools":{
+        "webcat": {
+            "service": "webcat",
+            "url": "TODO : look this up as per the `service list` command",
+            "description": "Search the web",
+            "permissions": ["*", "tmfrisinger@gmail.com"]
+        }
+    },
+    "frameworks": {
+        "postgres": {
+            "type": "sql",
+            "migration_tool": "alembic"
+        },
+        "neo4j": {
+            "type": "graph",
+            "migration_tool": "cypher"
+        },
+        "elasticsearch": {
+            "type": "search",
+            "migration_tool": "index_settings"
         }
     }
 }
