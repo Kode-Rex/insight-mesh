@@ -97,6 +97,36 @@ Open a service in the browser:
 weave service open service_name
 ```
 
+## Configuration
+
+Weave uses a configuration file to map Docker containers to logical services. This configuration is stored in `.weave/config.json` in the project root.
+
+The configuration file has the following structure:
+
+```json
+{
+    "project_name": "your-project-name",
+    "services": {
+        "service-id": {
+            "display_name": "Human-readable service name",
+            "description": "Service description",
+            "images": ["image:tag", "another-image:tag"],
+            "container_patterns": ["container-name-pattern"]
+        }
+    }
+}
+```
+
+- `project_name`: The prefix used for Docker containers
+- `services`: A map of service definitions
+  - `service-id`: A unique identifier for the service
+    - `display_name`: A human-readable name for the service
+    - `description`: A brief description of the service
+    - `images`: An array of Docker image patterns to match
+    - `container_patterns`: An array of container name patterns to match
+
+When running `weave service list`, containers are grouped by their matching service based on the container name or image patterns.
+
 ## Options
 
 Many commands support additional options. Use `--help` with any command to see available options:
