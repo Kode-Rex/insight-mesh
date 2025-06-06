@@ -9,7 +9,7 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}Installing Weaver...${NC}"
+echo -e "${BLUE}Installing Weave...${NC}"
 
 # Find python - try python3, then python
 if command -v python3 &> /dev/null; then
@@ -54,14 +54,14 @@ pip install -r requirements.txt
 
 # Make the script executable
 echo -e "${YELLOW}Making script executable...${NC}"
-chmod +x bin/weaver
+chmod +x bin/weave
 
 # Create symlink for easy access
-SYMLINK_PATH="$HOME/.local/bin/weaver"
+SYMLINK_PATH="$HOME/.local/bin/weave"
 mkdir -p "$HOME/.local/bin"
 
 echo -e "${YELLOW}Creating symlink to $SYMLINK_PATH...${NC}"
-ln -sf "$(pwd)/bin/weaver" "$SYMLINK_PATH"
+ln -sf "$(pwd)/bin/weave" "$SYMLINK_PATH"
 
 # Update PATH if needed
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -80,23 +80,23 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
 fi
 
 # Create a wrapper script that activates the virtual environment
-WRAPPER_PATH="$HOME/.local/bin/weaver"
+WRAPPER_PATH="$HOME/.local/bin/weave"
 cat > "$WRAPPER_PATH" <<EOL
 #!/bin/bash
-# Wrapper script for weaver that activates the virtual environment
+# Wrapper script for weave that activates the virtual environment
 
 # Activate the virtual environment
 source "$(pwd)/venv/bin/activate"
 
-# Run the actual weaver command
-"$(pwd)/bin/weaver" "\$@"
+# Run the actual weave command
+"$(pwd)/bin/weave" "\$@"
 EOL
 
 chmod +x "$WRAPPER_PATH"
 
-echo -e "${GREEN}Weaver has been installed!${NC}"
-echo -e "${BLUE}You can now use 'weaver' command from anywhere.${NC}"
+echo -e "${GREEN}Weave has been installed!${NC}"
+echo -e "${BLUE}You can now use 'weave' command from anywhere.${NC}"
 
 # Show a test command
 echo -e "${YELLOW}Try running this command to verify installation:${NC}"
-echo -e "${BLUE}weaver --help${NC}" 
+echo -e "${BLUE}weave --help${NC}" 

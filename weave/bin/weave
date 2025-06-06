@@ -1,0 +1,598 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import subprocess
+import click
+import json
+import webbrowser
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich import print as rprint
+from dotenv import load_dotenv
+from pathlib import Path
+
+console = Console()
+
+# Load environment variables
+load_dotenv()
+
+# Read project name from config file
+def get_config():
+    try:
+        # First try home directory
+        config_path = Path.home() / '.weave' / 'config.json'
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        
+        # Then try current directory
+        config_path = Path('.weave') / 'config.json'
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        
+        # Then try parent directory (project root)
+        config_path = Path('..') / '.weave' / 'config.json'
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        
+        # Search up the directory tree
+        current_path = Path.cwd()
+        while current_path != current_path.parent:
+            config_path = current_path / '.weave' / 'config.json'
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+            current_path = current_path.parent
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not read config file: {str(e)}[/yellow]")
+    
+    return {"project_name": "insight-mesh", "services": {}}  # Default value
+
+def get_project_name():
+    return get_config().get("project_name", "insight-mesh")
+
+def get_service_info(container_name):
+    config = get_config()
+    mappings = config.get("container_mappings", {})
+    
+    # First try exact match
+    if container_name in mappings:
+        return mappings[container_name]
+    
+    # Then try partial match (for when container names have dynamic suffixes)
+    for pattern, info in mappings.items():
+        if pattern in container_name:
+            return info
+    
+    return {}
+
+def get_service_info_by_container(container_name):
+    """Get service info for a container name"""
+    config = get_config()
+    mappings = config.get("container_mappings", {})
+    
+    # First try exact match
+    if container_name in mappings:
+        return mappings[container_name]
+    
+    # Then try partial match (for when container names have dynamic suffixes)
+    for pattern, info in mappings.items():
+        if pattern in container_name:
+            return info
+    
+    return {}
+
+def get_service_info_by_image(image_name):
+    """Get service info for an image name"""
+    config = get_config()
+    image_mappings = config.get("images", {})
+    
+    # First try exact match
+    if image_name in image_mappings:
+        service_name = image_mappings[image_name]
+        # Find the service info by service name
+        for _, info in config.get("container_mappings", {}).items():
+            if info.get("service") == service_name:
+                return info
+    
+    # Then try partial match
+    for pattern, service_name in image_mappings.items():
+        if pattern in image_name:
+            # Find the service info by service name
+            for _, info in config.get("container_mappings", {}).items():
+                if info.get("service") == service_name:
+                    return info
+    
+    return {}
+
+def get_service_for_container(container_name, image_name):
+    """Find the service that matches a container name or image name"""
+    config = get_config()
+    services = config.get("services", {})
+    
+    # For each service, check if the container name or image matches any patterns
+    for service_id, service_info in services.items():
+        # Check container name patterns
+        container_patterns = service_info.get("container_patterns", [])
+        for pattern in container_patterns:
+            if pattern in container_name:
+                return service_id, service_info
+        
+        # Check image patterns
+        image_patterns = service_info.get("images", [])
+        for pattern in image_patterns:
+            if pattern in image_name:
+                return service_id, service_info
+    
+    return None, {}
+
+def get_service_by_id(service_id):
+    """Get service info by its ID"""
+    config = get_config()
+    services = config.get("services", {})
+    return services.get(service_id, {})
+
+# Project name to scope all operations
+PROJECT_NAME = get_project_name()
+
+def run_command(command, verbose=False):
+    """Run a shell command and return the result"""
+    try:
+        if verbose:
+            console.print(f"[bold blue]Running:[/bold blue] {' '.join(command)}")
+            
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+            return False
+            
+        if verbose and result.stdout:
+            console.print(result.stdout)
+            
+        return True
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        return False
+
+@click.group()
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+@click.pass_context
+def cli(ctx, verbose):
+    """Weaver: A simple tool to manage Insight Mesh services"""
+    ctx.ensure_object(dict)
+    ctx.obj['VERBOSE'] = verbose
+
+@cli.command('up')
+@click.option('--detach', '-d', is_flag=True, help='Run in detached mode')
+@click.option('--service', '-s', multiple=True, help='Specific service(s) to start')
+@click.pass_context
+def up(ctx, detach, service):
+    """Start services using docker-compose up"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'up']
+    
+    if detach:
+        command.append('-d')
+        
+    if service:
+        command.extend(service)
+        
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold green]Starting services...", spinner="dots"):
+        if run_command(command, verbose):
+            if detach:
+                console.print("[bold green]Services started successfully in detached mode[/bold green]")
+            else:
+                console.print("[bold green]Services started successfully (press Ctrl+C to stop)[/bold green]")
+
+@cli.command('down')
+@click.option('--volumes', '-v', is_flag=True, help='Remove volumes')
+@click.option('--remove-orphans', is_flag=True, help='Remove containers for services not in the compose file')
+@click.pass_context
+def down(ctx, volumes, remove_orphans):
+    """Stop services using docker-compose down"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'down']
+    
+    if volumes:
+        command.append('-v')
+        
+    if remove_orphans:
+        command.append('--remove-orphans')
+        
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold yellow]Stopping services...", spinner="dots"):
+        if run_command(command, verbose):
+            console.print("[bold green]Services stopped successfully[/bold green]")
+
+@cli.command('ps')
+@click.pass_context
+def ps(ctx):
+    """List running services"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'ps']
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold blue]Fetching service status...", spinner="dots"):
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+            return
+        
+        console.print(result.stdout)
+
+@cli.command('logs')
+@click.option('--follow', '-f', is_flag=True, help='Follow logs')
+@click.option('--tail', '-n', default=100, help='Number of lines to show')
+@click.argument('service', required=False)
+@click.pass_context
+def logs(ctx, follow, tail, service):
+    """Show logs for services"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'logs']
+    
+    if follow:
+        command.append('-f')
+        
+    command.extend(['--tail', str(tail)])
+    
+    if service:
+        command.append(service)
+        
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    if verbose:
+        console.print(f"[bold blue]Running:[/bold blue] {' '.join(command)}")
+        
+    subprocess.run(command)
+
+@cli.command('restart')
+@click.argument('service', required=False)
+@click.pass_context
+def restart(ctx, service):
+    """Restart services"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'restart']
+    
+    if service:
+        command.append(service)
+        
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold yellow]Restarting services...", spinner="dots"):
+        if run_command(command, verbose):
+            console.print("[bold green]Services restarted successfully[/bold green]")
+
+@cli.command('status')
+@click.pass_context
+def status(ctx):
+    """Show status of all services"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'ps', '--format', 'json']
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold blue]Fetching service status...", spinner="dots"):
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+            return
+        
+        try:
+            # The output is one JSON object per line, not a JSON array
+            services = []
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    try:
+                        service_data = json.loads(line)
+                        services.append(service_data)
+                    except json.JSONDecodeError:
+                        continue
+            
+            if not services:
+                console.print("[yellow]No running services found[/yellow]")
+                return
+                
+            table = Table(title="Insight Mesh Services")
+            table.add_column("Service", style="cyan")
+            table.add_column("Name", style="blue")
+            table.add_column("Status", style="green")
+            table.add_column("Ports", style="yellow")
+            
+            for service in services:
+                name = service.get('Name', 'Unknown')
+                service_name = service.get('Service', 'Unknown')
+                status = service.get('Status', 'Unknown')
+                ports = service.get('Ports', '')
+                
+                status_style = "green" if "Up" in status and "unhealthy" not in status else "red"
+                table.add_row(
+                    service_name,
+                    name,
+                    f"[{status_style}]{status}[/{status_style}]",
+                    ports
+                )
+            
+            console.print(table)
+        except Exception as e:
+            # Fallback to plain output
+            console.print(f"[bold red]Error parsing JSON:[/bold red] {str(e)}")
+            console.print("[yellow]Showing raw output:[/yellow]")
+            console.print(result.stdout)
+
+@cli.command('config')
+@click.pass_context
+def config(ctx):
+    """Show the Docker Compose configuration"""
+    command = ['docker', 'compose', '-p', PROJECT_NAME, 'config']
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    with console.status("[bold blue]Fetching configuration...", spinner="dots"):
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+            return
+        
+        console.print(result.stdout)
+
+# Create a function to extract URLs from port mappings
+def extract_urls(ports_string):
+    """Extract URLs from Docker port mappings"""
+    urls = []
+    if not ports_string:
+        return urls
+    
+    for port_mapping in ports_string.split(','):
+        if '->' in port_mapping and 'tcp' in port_mapping:
+            try:
+                host_part = port_mapping.split('->')[0].strip()
+                if ':' in host_part:
+                    host, port = host_part.split(':')
+                    urls.append(f"http://{host}:{port}")
+                else:
+                    port = host_part
+                    urls.append(f"http://localhost:{port}")
+            except Exception:
+                pass
+    return urls
+
+@cli.group('service')
+@click.pass_context
+def service_group(ctx):
+    """Manage Docker services"""
+    pass
+
+@service_group.command('list')
+@click.option('--project-prefix', '-p', help='Project prefix for filtering services')
+@click.option('--debug', '-d', is_flag=True, help='Show debug information')
+@click.pass_context
+def service_list(ctx, project_prefix, debug):
+    """List all running Docker services with URLs"""
+    prefix = project_prefix or PROJECT_NAME
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    if debug:
+        console.print("[bold]Config:[/bold]")
+        console.print(get_config())
+    
+    # Get running containers with the project prefix
+    command = f"docker ps --format '{{{{.ID}}}}|{{{{.Names}}}}|{{{{.Ports}}}}|{{{{.Image}}}}' | grep {prefix}"
+    
+    if verbose or debug:
+        console.print(f"[bold blue]Running:[/bold blue] {command}")
+    
+    result = subprocess.run(command, capture_output=True, text=True, shell=True)
+    
+    if result.returncode != 0 and result.returncode != 1:  # grep returns 1 if no matches
+        console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+        return
+    
+    if not result.stdout.strip():
+        console.print("[yellow]No services found.[/yellow]")
+        return
+    
+    # Group containers by service
+    services = {}
+    
+    for line in result.stdout.strip().split('\n'):
+        if not line:
+            continue
+        
+        parts = line.split('|')
+        if len(parts) >= 4:
+            container_id, container_name, ports, image = parts[0], parts[1], parts[2], parts[3]
+            
+            if debug:
+                console.print(f"[cyan]Processing container:[/cyan] {container_name} / {image}")
+            
+            # Get service info
+            service_id, service_info = get_service_for_container(container_name, image)
+            
+            if debug:
+                if service_id:
+                    console.print(f"[green]  Matched service:[/green] {service_id}")
+                else:
+                    console.print(f"[yellow]  No match found[/yellow]")
+            
+            # If no service found, create a generic one
+            if not service_id:
+                service_id = f"unknown-{container_name}"
+                service_info = {
+                    "display_name": container_name,
+                    "description": "Unknown service"
+                }
+            
+            # Extract URLs
+            urls = extract_urls(ports)
+            
+            # Add to services dict
+            if service_id not in services:
+                services[service_id] = {
+                    "display_name": service_info.get("display_name", service_id),
+                    "description": service_info.get("description", ""),
+                    "containers": [],
+                    "urls": set()
+                }
+            
+            services[service_id]["containers"].append({
+                "id": container_id,
+                "name": container_name,
+                "image": image,
+                "ports": ports,
+                "urls": urls
+            })
+            
+            # Add URLs to set
+            for url in urls:
+                services[service_id]["urls"].add(url)
+    
+    # Display results
+    table = Table("Service", "Display Name", "Description", "Containers", "URLs")
+    
+    for service_id, info in sorted(services.items()):
+        container_names = [c["name"] for c in info["containers"]]
+        urls = list(info["urls"])
+        
+        table.add_row(
+            service_id,
+            info["display_name"],
+            info["description"] or "-",
+            "\n".join(container_names),
+            "\n".join(urls) if urls else "N/A"
+        )
+    
+    console.print(table)
+
+    # If verbose, also show detailed container information
+    if verbose:
+        console.print("\n[bold]Detailed Container Information:[/bold]")
+        
+        for service_id, info in services.items():
+            console.print(f"\n[bold cyan]{info['display_name']} ({service_id})[/bold cyan]")
+            
+            container_table = Table("Container ID", "Container Name", "Image", "Ports", "URLs")
+            
+            for container in info["containers"]:
+                container_table.add_row(
+                    container["id"],
+                    container["name"],
+                    container["image"],
+                    container["ports"],
+                    "\n".join(container["urls"]) if container["urls"] else "N/A"
+                )
+            
+            console.print(container_table)
+
+@service_group.command('open')
+@click.argument('service_identifier')
+@click.option('--project-prefix', '-p', help='Project prefix for filtering services')
+@click.pass_context
+def service_open(ctx, service_identifier, project_prefix):
+    """Open a service URL in the default browser.
+    service_identifier can be a service name, display name, or container name."""
+    prefix = project_prefix or PROJECT_NAME
+    
+    # Get running containers with the project prefix
+    command = f"docker ps --format '{{{{.ID}}}}|{{{{.Names}}}}|{{{{.Ports}}}}|{{{{.Image}}}}' | grep {prefix}"
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    if verbose:
+        console.print(f"[bold blue]Running:[/bold blue] {command}")
+    
+    result = subprocess.run(command, capture_output=True, text=True, shell=True)
+    
+    if result.returncode != 0 and result.returncode != 1:  # grep returns 1 if no matches
+        console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+        return
+    
+    # Parse all running containers
+    running_containers = []
+    for line in result.stdout.strip().split('\n'):
+        if not line:
+            continue
+        parts = line.split('|')
+        if len(parts) >= 4:
+            container_id, container_name, ports, image = parts[0], parts[1], parts[2], parts[3]
+            service_id, service_info = get_service_for_container(container_name, image)
+            
+            running_containers.append({
+                'id': container_id,
+                'name': container_name,
+                'ports': ports,
+                'image': image,
+                'service_id': service_id,
+                'service_info': service_info
+            })
+    
+    if not running_containers:
+        console.print("[yellow]No services found.[/yellow]")
+        return
+    
+    # Try to find the service/container by various identifiers
+    target_containers = []
+    
+    # 1. Check if it's a direct service ID
+    service_info = get_service_by_id(service_identifier)
+    if service_info:
+        # Find all containers for this service
+        for container in running_containers:
+            if container['service_id'] == service_identifier:
+                target_containers.append(container)
+    
+    # 2. Check for display name match
+    if not target_containers:
+        config = get_config()
+        services = config.get("services", {})
+        for service_id, info in services.items():
+            if service_identifier == info.get("display_name"):
+                # Find all containers for this service
+                for container in running_containers:
+                    if container['service_id'] == service_id:
+                        target_containers.append(container)
+                break
+    
+    # 3. Check for container name match (direct or partial)
+    if not target_containers:
+        for container in running_containers:
+            if service_identifier == container['name'] or service_identifier in container['name']:
+                target_containers.append(container)
+                break
+    
+    if not target_containers:
+        console.print(f"[yellow]Service '{service_identifier}' not found[/yellow]")
+        return
+    
+    # Find the first container with URLs
+    container_with_urls = None
+    for container in target_containers:
+        urls = extract_urls(container['ports'])
+        if urls:
+            container_with_urls = container
+            container_with_urls['urls'] = urls
+            break
+    
+    if not container_with_urls:
+        console.print(f"[yellow]No URLs available for service '{service_identifier}'[/yellow]")
+        return
+    
+    # Get service info for display
+    display_name = container_with_urls['service_info'].get('display_name', 
+                                                         container_with_urls['service_id'] or 
+                                                         container_with_urls['name'])
+    
+    # Open in browser
+    url = container_with_urls['urls'][0]
+    try:
+        webbrowser.open(url)
+        console.print(f"[green]Opened {display_name} in default browser: {url}[/green]")
+    except Exception as e:
+        console.print(f"[red]Error opening URL {url}: {str(e)}[/red]")
+
+def main():
+    cli(obj={})
+
+if __name__ == '__main__':
+    main() 
