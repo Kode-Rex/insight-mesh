@@ -31,9 +31,9 @@ if [ -f "test_rag_handler.py" ]; then
     python test_rag_handler.py
 fi
 
-if [ -f "test_fast_mcp.py" ]; then
+if [ -f "test_fastmcp.py" ]; then
     echo "Running FastMCP tests..."
-    python test_fast_mcp.py
+    python test_fastmcp.py
 fi
 
 echo "All tests completed!" 
