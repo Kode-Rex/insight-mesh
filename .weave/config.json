@@ -32,31 +32,31 @@
             "images": ["dagster"],
             "container_patterns": ["dagster"]
         },
-        "mcp-server": {
+        "mcp": {
             "display_name": "MCP Server",
             "description": "Project MCP server",
             "images": ["mcp"],
             "container_patterns": ["mcp"]
         },
-        "postgres-dagster": {
+        "dagster-db": {
             "display_name": "Dagster DB",
             "description": "Dagster database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_dagster-"]
         },
-        "postgres-mcp": {
+        "mcp-db": {
             "display_name": "MCP DB",
             "description": "MCP database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_mcp-"]
         },
-        "postgres-openwebui": {
+        "openwebui-db": {
             "display_name": "OpenWebUI DB",
             "description": "OpenWebUI database",
             "images": ["postgres:14"],
             "container_patterns": ["postgres_openwebui-"]
         },
-        "postgres-litellm": {
+        "litellm-db": {
             "display_name": "LiteLLM DB",
             "description": "LiteLLM database",
             "images": ["postgres:14"],

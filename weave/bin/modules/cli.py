@@ -12,7 +12,7 @@ from rich import print as rprint
 from dotenv import load_dotenv
 from pathlib import Path
 
-from .config import get_project_name
+from .config import get_project_name, get_docker_service_name
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
 
@@ -44,7 +44,9 @@ def up(ctx, detach, service):
         command.append('-d')
         
     if service:
-        command.extend(service)
+        # Convert service IDs from config to docker service names
+        docker_services = [get_docker_service_name(s, PROJECT_NAME) for s in service]
+        command.extend(docker_services)
         
     verbose = ctx.obj.get('VERBOSE', False)
     
@@ -115,6 +117,9 @@ def logs(ctx, follow, tail, service, verbose):
         get_rag_logs(PROJECT_NAME, follow, tail, is_verbose, not verbose)
         return
     
+    # Convert service ID from config to docker service name if needed
+    docker_service = get_docker_service_name(service, PROJECT_NAME) if service else None
+    
     # Standard Docker Compose logs command
     command = ['docker', 'compose', '-p', PROJECT_NAME, 'logs']
     
@@ -123,8 +128,8 @@ def logs(ctx, follow, tail, service, verbose):
         
     command.extend(['--tail', str(tail)])
     
-    if service:
-        command.append(service)
+    if docker_service:
+        command.append(docker_service)
     
     if is_verbose:
         console.print(f"[bold blue]Running:[/bold blue] {' '.join(command)}")
@@ -138,8 +143,10 @@ def restart(ctx, service):
     """Restart services"""
     command = ['docker', 'compose', '-p', PROJECT_NAME, 'restart']
     
+    # Convert service ID from config to docker service name if needed
     if service:
-        command.append(service)
+        docker_service = get_docker_service_name(service, PROJECT_NAME)
+        command.append(docker_service)
         
     verbose = ctx.obj.get('VERBOSE', False)
     
