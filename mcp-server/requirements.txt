@@ -14,5 +14,7 @@ elasticsearch[async]==8.9.0
 PyJWT>=2.8.0
 SQLAlchemy>=1.4
 aiohttp>=3.9.0
-fastmcp>=2.3.4
+fastmcp==2.7.0
+mcp>=1.9.3
+rich>=13.9.4
 httpx>=0.28.1
