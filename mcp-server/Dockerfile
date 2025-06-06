@@ -25,7 +25,7 @@ RUN useradd -m -u 1000 appuser && \
 USER appuser
 
 # Expose port
-EXPOSE 8000
+EXPOSE 9091
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
