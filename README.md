@@ -118,6 +118,63 @@ To customize the RAG pipeline, you can:
 3. Create custom retrieval pipelines in the `rag_pipeline` directory
 4. Connect your data sources to the system (currently supports Google Drive, with more integrations coming soon)
 
+## Testing
+
+All components have test suites that ensure functionality and reliability. Tests are run automatically on GitHub Actions for every pull request and push to the main branch.
+
+### Running Tests Locally
+
+A unified test script is provided to run all component tests with the same configuration as the GitHub Actions workflow:
+
+```bash
+./run_all_tests.sh
+```
+
+This script:
+- Creates Python 3.11 virtual environments for each component
+- Installs required dependencies
+- Runs tests with the same parameters as the CI pipeline
+- Displays test results with coverage reports
+
+#### Component-Specific Tests
+
+You can also run tests for individual components:
+
+1. **MCP Server**:
+   ```bash
+   cd mcp-server
+   python -m pytest test_mcp_mocked.py test_fastmcp.py tests/
+   ```
+
+2. **RAG Pipeline**:
+   ```bash
+   cd rag_pipeline
+   python -m pytest test_rag_handler.py
+   ```
+
+3. **Dagster**:
+   ```bash
+   cd dagster_project
+   python -m pytest test_assets.py test_web_assets.py
+   ```
+
+4. **Slack Bot**:
+   ```bash
+   cd slack-bot
+   # Set environment variables
+   SLACK_BOT_TOKEN="xoxb-test-token" \
+   SLACK_APP_TOKEN="xapp-test-token" \
+   LLM_API_URL="http://localhost:8000" \
+   LLM_API_KEY="test-key" \
+   python -m pytest tests/ --cov=.
+   ```
+
+### Test Requirements
+
+- Python 3.11
+- pytest, pytest-asyncio, pytest-cov
+- Component-specific dependencies (installed automatically by the test script)
+
 ## Data Sources
 
 ### Google Drive Integration
