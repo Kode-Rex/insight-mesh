@@ -3,7 +3,7 @@ import jwt
 import os
 from loguru import logger
 from dotenv import load_dotenv
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from context_service import context_service
 from models import (
     ContextRequest,
@@ -15,7 +15,7 @@ from models import (
     UserInfo
 )
 from datetime import datetime, UTC
-import time
+
 from fastapi import FastAPI, Depends, Header, HTTPException
 
 # Load environment variables
@@ -353,7 +353,6 @@ async def health_check_endpoint() -> Dict[str, str]:
 
 if __name__ == "__main__":
     import uvicorn
-    import contextlib
     
     # Create a FastAPI app that mounts both the FastMCP app and the legacy REST API
     from fastapi import FastAPI
