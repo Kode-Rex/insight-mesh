@@ -227,7 +227,7 @@ async def _process_context_request(
             await logger_context.error(f"Error processing context request: {str(e)}")
         raise
 
-@mcp.tool
+@mcp.tool()
 async def get_context(
     auth_token: str,
     token_type: str,
@@ -256,7 +256,7 @@ async def get_context(
         logger_context=ctx
     )
 
-@mcp.tool
+@mcp.tool()
 def health_check() -> Dict[str, str]:
     """Health check endpoint"""
     return {"status": "healthy"}
