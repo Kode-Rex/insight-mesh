@@ -6,8 +6,6 @@ from dotenv import load_dotenv
 from typing import Dict, Any, Optional
 from context_service import context_service
 from models import (
-    ContextRequest,
-    ContextResponse,
     ContextItem,
     ContextSource,
     RetrievalMetadata,
@@ -15,8 +13,6 @@ from models import (
     UserInfo
 )
 from datetime import datetime, UTC
-
-from fastapi import FastAPI, Depends, Header, HTTPException
 
 # Load environment variables
 load_dotenv()
@@ -51,9 +47,6 @@ logger.add(
 
 # Create the FastMCP app
 mcp = FastMCP("InsightMesh MCP Server")
-
-# Create a FastAPI app for backward compatibility
-app = FastAPI()
 
 # Helper function to validate token
 async def validate_token(token: str, token_type: str) -> UserInfo:
@@ -130,39 +123,29 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
         logger.error(f"Error validating token: {str(e)}", exc_info=True)
         raise ValueError("Error processing token") from e
 
-# FastAPI API key verification
-async def verify_api_key(x_api_key: str = Header(...)) -> None:
-    """Verify the API key from the request header"""
-    if x_api_key != settings.MCP_API_KEY:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key"
-        )
-
-@mcp.tool
-async def get_context(
+async def _process_context_request(
     auth_token: str,
     token_type: str,
     prompt: str,
     history_summary: Optional[str] = None,
-    ctx: Context = None
+    logger_context: Optional[Context] = None
 ) -> Dict[str, Any]:
     """
-    Retrieve context based on the user's token, prompt, and conversation history.
-    The context is personalized based on the user's identity and the current conversation.
+    Shared context processing logic for both the FastMCP tool and legacy REST API.
     
     Args:
         auth_token: JWT token for user authentication
         token_type: Type of JWT token (e.g., OpenWebUI)
         prompt: User's current prompt
         history_summary: Summary of conversation history (optional)
+        logger_context: FastMCP Context object for logging (optional)
         
     Returns:
         A dictionary containing context items and metadata
     """
     try:
-        if ctx:
-            await ctx.info(f"Processing context request for prompt: {prompt[:100]}...")  # Log first 100 chars of prompt
+        if logger_context:
+            await logger_context.info(f"Processing context request for prompt: {prompt[:100]}...")
         else:
             logger.info(f"Processing context request for prompt: {prompt[:100]}...")
         
@@ -170,12 +153,12 @@ async def get_context(
         user_info = await validate_token(auth_token, token_type)
         user_id = user_info.id
         
-        if ctx:
-            await ctx.info(f"User authenticated: {user_id}")
+        if logger_context:
+            await logger_context.info(f"User authenticated: {user_id}")
         else:
             logger.info(f"User authenticated: {user_id}")
         
-        # Get context for the prompt using ContextService (this will search Elasticsearch)
+        # Get context for the prompt using ContextService
         context_result = await context_service.get_context_for_prompt(
             user_id=user_id,
             prompt=prompt,
@@ -183,8 +166,8 @@ async def get_context(
             user_info=user_info
         )
         
-        if ctx:
-            await ctx.info(f"Context retrieved - Cache hit: {context_result.cache_hit}, "
+        if logger_context:
+            await logger_context.info(f"Context retrieved - Cache hit: {context_result.cache_hit}, "
                     f"Retrieval time: {context_result.retrieval_time_ms}ms, "
                     f"Documents: {len(context_result.documents)}")
         else:
@@ -226,23 +209,52 @@ async def get_context(
         )
         
         # Create and return the response
-        response = {
+        result = {
             "context_items": [item.dict() for item in context_items],
             "metadata": response_metadata.dict()
         }
         
-        if ctx:
-            await ctx.info(f"Returning response with {len(context_items)} context items")
+        if logger_context:
+            await logger_context.info(f"Returning response with {len(context_items)} context items")
         else:
             logger.info(f"Returning response with {len(context_items)} context items")
             
-        return response
+        return result
         
     except Exception as e:
         logger.error(f"Error processing context request: {str(e)}", exc_info=True)
-        if ctx:
-            await ctx.error(f"Error processing context request: {str(e)}")
+        if logger_context:
+            await logger_context.error(f"Error processing context request: {str(e)}")
         raise
+
+@mcp.tool
+async def get_context(
+    auth_token: str,
+    token_type: str,
+    prompt: str,
+    history_summary: Optional[str] = None,
+    ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Retrieve context based on the user's token, prompt, and conversation history.
+    The context is personalized based on the user's identity and the current conversation.
+    
+    Args:
+        auth_token: JWT token for user authentication
+        token_type: Type of JWT token (e.g., OpenWebUI)
+        prompt: User's current prompt
+        history_summary: Summary of conversation history (optional)
+        
+    Returns:
+        A dictionary containing context items and metadata
+    """
+    return await _process_context_request(
+        auth_token=auth_token,
+        token_type=token_type,
+        prompt=prompt,
+        history_summary=history_summary,
+        logger_context=ctx
+    )
 
 @mcp.tool
 def health_check() -> Dict[str, str]:
@@ -264,109 +276,9 @@ def system_info() -> str:
     - health_check: Check if the server is healthy
     """
 
-# FastAPI endpoint for backward compatibility with the RAG hook
-@app.post("/context", response_model=ContextResponse)
-async def legacy_context_endpoint(
-    request: ContextRequest,
-    _: None = Depends(verify_api_key)
-) -> ContextResponse:
-    """Legacy REST API endpoint for backward compatibility with the RAG hook"""
-    try:
-        logger.info(f"Legacy REST endpoint called for prompt: {request.prompt[:100]}...")
-        
-        # Implement the context logic directly here instead of trying to call the FastMCP tool
-        try:
-            # Validate the token and get user info
-            user_info = await validate_token(request.auth_token, request.token_type)
-            user_id = user_info.id
-            logger.info(f"User authenticated: {user_id}")
-            
-            # Get context for the prompt using ContextService
-            context_result = await context_service.get_context_for_prompt(
-                user_id=user_id,
-                prompt=request.prompt,
-                history_summary=request.history_summary,
-                user_info=user_info
-            )
-            
-            logger.info(f"Context retrieved - Cache hit: {context_result.cache_hit}, "
-                    f"Retrieval time: {context_result.retrieval_time_ms}ms, "
-                    f"Documents: {len(context_result.documents)}")
-            
-            # Convert document results to context items
-            context_items = [
-                ContextItem(
-                    content=doc.content,
-                    role="system",
-                    metadata={
-                        "source": doc.source,
-                        "document_id": doc.metadata.get("id"),
-                        "url": doc.metadata.get("url"),
-                        "file_name": doc.metadata.get("file_name"),
-                        "created_time": doc.metadata.get("created_time"),
-                        "modified_time": doc.metadata.get("modified_time"),
-                        "relevance_score": doc.metadata.get("score"),
-                        "source_type": doc.metadata.get("source_type")
-                    }
-                )
-                for doc in context_result.documents
-            ]
-            
-            # Create response metadata
-            response_metadata = ResponseMetadata(
-                user=user_info,
-                token_type=request.token_type,
-                timestamp=datetime.now(UTC).isoformat(),
-                context_sources=[
-                    ContextSource(type="documents", count=len(context_result.documents))
-                ],
-                retrieval_metadata=RetrievalMetadata(
-                    cache_hit=context_result.cache_hit,
-                    retrieval_time_ms=context_result.retrieval_time_ms
-                )
-            )
-            
-            # Create and return the response
-            response = ContextResponse(
-                context_items=context_items,
-                metadata=response_metadata
-            )
-            
-            logger.info(f"Legacy REST endpoint returning {len(context_items)} context items")
-            return response
-                
-        except Exception as e:
-            logger.error(f"Error processing context request: {str(e)}", exc_info=True)
-            raise
-        
-    except ValueError as e:
-        logger.error(f"Validation error in legacy endpoint: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Error in legacy endpoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-@app.get("/health")
-async def health_check_endpoint() -> Dict[str, str]:
-    """Health check endpoint for FastAPI"""
-    return {"status": "healthy"}
-
 if __name__ == "__main__":
     import uvicorn
     
-    # Create a FastAPI app that mounts both the FastMCP app and the legacy REST API
-    from fastapi import FastAPI
-    
-    # Create a combined app
-    combined_app = FastAPI()
-    
-    # Mount the FastMCP http app at /mcp
-    combined_app.mount("/mcp", mcp.http_app())
-    
-    # Include the legacy API routes
-    for route in app.routes:
-        combined_app.routes.append(route)
-    
-    # Run the combined app
-    logger.info(f"Starting combined FastMCP + REST API server on {settings.MCP_HOST}:{settings.MCP_PORT}...")
-    uvicorn.run(combined_app, host=settings.MCP_HOST, port=settings.MCP_PORT) 
+    # Run the FastMCP app
+    logger.info(f"Starting FastMCP server on {settings.MCP_HOST}:{settings.MCP_PORT}...")
+    uvicorn.run(mcp.http_app(), host=settings.MCP_HOST, port=settings.MCP_PORT) 
