@@ -44,11 +44,11 @@ def get_config():
     except Exception as e:
         console.print(f"[yellow]Warning: Could not read config file: {str(e)}[/yellow]")
     
-    return {"project_name": "insight-mesh", "services": {}}  # Default value
+    return {"project_id": "insight-mesh", "services": {}}  # Default value
 
 def get_project_name():
     """Get the project name from config"""
-    return get_config().get("project_name", "insight-mesh")
+    return get_config().get("project_id", "insight-mesh")
 
 def get_service_info(container_name):
     """Get service info for a container name"""

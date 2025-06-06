@@ -141,7 +141,8 @@ The configuration file has the following structure:
 
 ```json
 {
-    "project_name": "your-project-name",
+    "project_id": "your-project-id",
+    "name": "Your Project Name",
     "services": {
         "service-id": {
             "display_name": "Human-readable service name",
@@ -153,7 +154,8 @@ The configuration file has the following structure:
 }
 ```
 
-- `project_name`: The prefix used for Docker containers
+- `project_id`: The identifier used for Docker containers prefix
+- `name`: The human-readable name of your project
 - `services`: A map of service definitions
   - `service-id`: A unique identifier for the service
     - `display_name`: A human-readable name for the service

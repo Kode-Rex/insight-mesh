@@ -1,5 +1,6 @@
 {
-    "project_name": "insight-mesh",
+    "project_id": "insight-mesh",
+    "name": "Insight Mesh",
     "description": "Delivering AI solutions directly into enterprise workflows—no extra tabs required.",
     "services": {
         "caddy": {
