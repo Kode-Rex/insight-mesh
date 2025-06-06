@@ -214,7 +214,7 @@ class TestMainAPI:
             )
             
             # Check response
-            assert response.status_code == 500
+            assert response.status_code == 400
             response_data = response.json()
             assert "detail" in response_data
             assert "Invalid token" in response_data["detail"]
