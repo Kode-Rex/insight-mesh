@@ -26,6 +26,8 @@ run_tests() {
   if [ ! -d "venv" ]; then
     echo "Creating Python 3.11 virtual environment..."
     python3.11 -m venv venv
+  else
+    echo "Using existing virtual environment..."
   fi
   
   # Activate virtual environment
@@ -39,9 +41,7 @@ run_tests() {
   fi
   
   # Ensure pytest is installed
-  if ! pip show pytest > /dev/null; then
-    pip install pytest pytest-asyncio pytest-cov
-  fi
+  pip install pytest pytest-asyncio pytest-cov
   
   # Run the tests
   echo "Running tests..."
