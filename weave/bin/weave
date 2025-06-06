@@ -243,14 +243,23 @@ def ps(ctx):
 @click.option('--follow', '-f', is_flag=True, help='Follow logs')
 @click.option('--tail', '-n', default=100, help='Number of lines to show')
 @click.argument('service', required=False)
-@click.option('--rag', is_flag=True, help='Show RAG logs from LiteLLM container')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed logs without filtering')
 @click.pass_context
-def logs(ctx, follow, tail, service, rag):
-    """Show logs for services"""
-    verbose = ctx.obj.get('VERBOSE', False)
+def logs(ctx, follow, tail, service, verbose):
+    """Show logs for services
     
-    # Special case for RAG logs
-    if rag:
+    SERVICE can be a Docker service name or a special value:
+    
+    * rag - Show RAG logs from the LiteLLM container (not a service but a special parameter)
+      Example: weave logs rag
+    
+    The 'rag' parameter extracts and filters logs from the RAG handler in the LiteLLM container.
+    Use --verbose to see unfiltered RAG logs.
+    """
+    is_verbose = ctx.obj.get('VERBOSE', False)
+    
+    # Special case for RAG logs - when service is "rag"
+    if service == "rag":
         # For RAG logs, we need to extract them from the LiteLLM container
         litellm_container = f"{PROJECT_NAME}-litellm-1"
         
@@ -262,36 +271,63 @@ def logs(ctx, follow, tail, service, rag):
             console.print(f"[bold red]Error:[/bold red] LiteLLM container '{litellm_container}' is not running")
             return
         
-        # Command to get RAG logs
+        # Base command to get RAG logs
         rag_cmd = ['docker', 'exec', litellm_container, 'cat', '/app/rag_handler.log']
         
-        if verbose:
+        if follow:
+            # For follow mode, we'll use 'tail -f' inside the container
+            rag_cmd = ['docker', 'exec', litellm_container, 'tail', '-f', '-n', str(tail), '/app/rag_handler.log']
+        
+        if is_verbose:
             console.print(f"[bold blue]Running:[/bold blue] {' '.join(rag_cmd)}")
         
-        # Run the command and capture output
+        # If follow mode is on, we'll just run the command directly
+        if follow:
+            if not verbose:
+                # Create a grep filter command to exclude noise
+                filter_cmd = ['grep', '-v', '-E', 
+                              'Spend transactions|Daily|encrypt_decrypt_utils|proxy_server\\.py|len new_models|hanging_request']
+                
+                # Pipe the output through grep
+                p1 = subprocess.Popen(rag_cmd, stdout=subprocess.PIPE)
+                p2 = subprocess.Popen(filter_cmd, stdin=p1.stdout)
+                
+                # Wait for the commands to complete
+                p2.communicate()
+            else:
+                # Show all logs
+                subprocess.run(rag_cmd)
+            return
+        
+        # Run the command and capture output for non-follow mode
         result = subprocess.run(rag_cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
             console.print(f"[bold red]Error:[/bold red] {result.stderr}")
             return
         
-        # Filter out noise from the logs for better readability
-        filtered_logs = []
-        for line in result.stdout.split('\n'):
-            # Skip lines with these patterns
-            if any(pattern in line for pattern in [
-                "Spend transactions", 
-                "Daily", 
-                "encrypt_decrypt_utils", 
-                "proxy_server.py", 
-                "len new_models", 
-                "hanging_request"
-            ]):
-                continue
-            filtered_logs.append(line)
-        
-        # Display the filtered logs
-        console.print("\n".join(filtered_logs))
+        # Display logs based on verbosity
+        if verbose:
+            # Show all logs
+            console.print(result.stdout)
+        else:
+            # Filter out noise from the logs for better readability
+            filtered_logs = []
+            for line in result.stdout.split('\n'):
+                # Skip lines with these patterns
+                if any(pattern in line for pattern in [
+                    "Spend transactions", 
+                    "Daily", 
+                    "encrypt_decrypt_utils", 
+                    "proxy_server.py", 
+                    "len new_models", 
+                    "hanging_request"
+                ]):
+                    continue
+                filtered_logs.append(line)
+            
+            # Display the filtered logs
+            console.print("\n".join(filtered_logs))
         return
     
     # Standard Docker Compose logs command
@@ -305,7 +341,7 @@ def logs(ctx, follow, tail, service, rag):
     if service:
         command.append(service)
     
-    if verbose:
+    if is_verbose:
         console.print(f"[bold blue]Running:[/bold blue] {' '.join(command)}")
         
     subprocess.run(command)
@@ -427,90 +463,6 @@ def extract_urls(ports_string):
 def service_group(ctx):
     """Manage Docker services"""
     pass
-
-@cli.group('rag')
-@click.pass_context
-def rag_group(ctx):
-    """RAG (Retrieval Augmented Generation) related commands"""
-    pass
-
-@rag_group.command('logs')
-@click.option('--follow', '-f', is_flag=True, help='Follow logs')
-@click.option('--tail', '-n', default=100, help='Number of lines to show')
-@click.option('--verbose', '-v', is_flag=True, help='Show detailed logs without filtering')
-@click.pass_context
-def rag_logs(ctx, follow, tail, verbose):
-    """Show RAG logs from the LiteLLM container"""
-    is_verbose = ctx.obj.get('VERBOSE', False)
-    
-    # For RAG logs, we need to extract them from the LiteLLM container
-    litellm_container = f"{PROJECT_NAME}-litellm-1"
-    
-    # First check if the LiteLLM container is running
-    check_cmd = ['docker', 'ps', '--filter', f"name={litellm_container}", '--format', '{{.Names}}']
-    result = subprocess.run(check_cmd, capture_output=True, text=True)
-    
-    if not result.stdout.strip():
-        console.print(f"[bold red]Error:[/bold red] LiteLLM container '{litellm_container}' is not running")
-        return
-    
-    # Base command to get RAG logs
-    rag_cmd = ['docker', 'exec', litellm_container, 'cat', '/app/rag_handler.log']
-    
-    if follow:
-        # For follow mode, we'll use 'tail -f' inside the container
-        rag_cmd = ['docker', 'exec', litellm_container, 'tail', '-f', '-n', str(tail), '/app/rag_handler.log']
-    
-    if is_verbose:
-        console.print(f"[bold blue]Running:[/bold blue] {' '.join(rag_cmd)}")
-    
-    # If follow mode is on, we'll just run the command directly
-    if follow:
-        if not verbose:
-            # Create a grep filter command to exclude noise
-            filter_cmd = ['grep', '-v', '-E', 
-                          'Spend transactions|Daily|encrypt_decrypt_utils|proxy_server\\.py|len new_models|hanging_request']
-            
-            # Pipe the output through grep
-            p1 = subprocess.Popen(rag_cmd, stdout=subprocess.PIPE)
-            p2 = subprocess.Popen(filter_cmd, stdin=p1.stdout)
-            
-            # Wait for the commands to complete
-            p2.communicate()
-        else:
-            # Show all logs
-            subprocess.run(rag_cmd)
-        return
-    
-    # Run the command and capture output for non-follow mode
-    result = subprocess.run(rag_cmd, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        console.print(f"[bold red]Error:[/bold red] {result.stderr}")
-        return
-    
-    # Display logs based on verbosity
-    if verbose:
-        # Show all logs
-        console.print(result.stdout)
-    else:
-        # Filter out noise from the logs for better readability
-        filtered_logs = []
-        for line in result.stdout.split('\n'):
-            # Skip lines with these patterns
-            if any(pattern in line for pattern in [
-                "Spend transactions", 
-                "Daily", 
-                "encrypt_decrypt_utils", 
-                "proxy_server.py", 
-                "len new_models", 
-                "hanging_request"
-            ]):
-                continue
-            filtered_logs.append(line)
-        
-        # Display the filtered logs
-        console.print("\n".join(filtered_logs))
 
 @service_group.command('list')
 @click.option('--project-prefix', '-p', help='Project prefix for filtering services')

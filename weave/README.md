@@ -97,6 +97,42 @@ Open a service in the browser:
 weave service open service_name
 ```
 
+### Logs
+
+View logs for all services:
+```
+weave logs
+```
+
+View logs for a specific service:
+```
+weave logs service_name
+```
+
+Follow logs in real-time:
+```
+weave logs -f [service_name]
+```
+
+**Special Case: RAG Logs**
+
+Although "rag" is not a service, you can view the RAG (Retrieval Augmented Generation) logs from the LiteLLM container using:
+```
+weave logs rag
+```
+
+This is a special parameter handled by the logs command to extract and filter RAG handler logs from the LiteLLM container.
+
+Follow RAG logs in real-time:
+```
+weave logs rag -f
+```
+
+Show more detailed RAG logs without filtering:
+```
+weave logs rag --verbose
+```
+
 ## Configuration
 
 Weave uses a configuration file to map Docker containers to logical services. This configuration is stored in `.weave/config.json` in the project root.
