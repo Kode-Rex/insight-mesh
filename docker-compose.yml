@@ -226,7 +226,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=insight_mesh
     ports:
-      - "5433:5432"  # Using a different port to avoid conflicts
+      - "5434:5432"  # Using a different port to avoid conflicts
     volumes:
       - postgres_dagster_data:/var/lib/postgresql/data
     healthcheck:
