@@ -40,24 +40,41 @@ Visit our website at [https://insightmesh.koderex.dev/](https://insightmesh.kode
 
 2. Configure your environment variables:
    ```bash
-   cp .env.example .env
+   cp env.example .env
    ```
-   Then edit the `.env` file to add your OpenAI API key and Google OAuth credentials.
+   Then edit the `.env` file to add your OpenAI API key, Google OAuth credentials, and other configuration settings.
    
-   Alternatively, use the setup script to configure Google authentication:
+   Alternatively, use the setup script to configure environment variables:
+   ```bash
+   chmod +x setup-env.sh
+   ./setup-env.sh
+   ```
+
+3. Set up Google authentication if needed:
    ```bash
    chmod +x setup-google-auth.sh
    ./setup-google-auth.sh
    ```
 
-3. Start the services:
+4. Start the services:
    ```bash
    docker-compose up -d
    ```
 
-4. Access the UI at [http://localhost:8080](http://localhost:8080) (secured with Google authentication)
+5. Access the UI at [http://localhost:8080](http://localhost:8080) (secured with Google authentication)
 
 ### Configuration
+
+All configuration is managed through environment variables in the `.env` file. Key variables include:
+
+- **API Keys**: `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `SERPER_API_KEY`
+- **Database**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- **Neo4j**: `NEO4J_USER`, `NEO4J_PASSWORD`
+- **OAuth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- **Slack Integration**: `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`
+- **Model Configuration**: `DEFAULT_MODEL`, `LLM_MODEL`
+
+For a complete list of available configuration options, refer to the `env.example` file.
 
 - LiteLLM configuration is in `config/litellm_config.yaml`
 - By default, the system uses GPT-4 and GPT-4o models
@@ -102,21 +119,17 @@ To integrate with Slack:
 | `OPENAI_API_KEY` | Your OpenAI API key | - |
 | `GOOGLE_CLIENT_ID` | Google OAuth Client ID | - |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret | - |
-| `DOMAIN` | Domain for your deployment | localhost |
-| `ALLOWED_EMAIL_DOMAIN` | Email domain allowed for authentication | gmail.com |
+| `ALLOWED_EMAIL_DOMAIN` | Email domain allowed for authentication | * |
+| `POSTGRES_USER` | PostgreSQL username | postgres |
+| `POSTGRES_PASSWORD` | PostgreSQL password | postgres |
+| `POSTGRES_DB` | PostgreSQL database name | litellm |
+| `NEO4J_USER` | Neo4j username | neo4j |
+| `NEO4J_PASSWORD` | Neo4j password | password |
 | `SLACK_BOT_TOKEN` | Slack Bot User OAuth Token | - |
 | `SLACK_APP_TOKEN` | Slack App-Level Token | - |
-| `LLM_API_URL` | URL for LLM API | http://litellm:4000/v1 |
-| `LLM_MODEL` | Model to use with LLM API | gpt-4o-mini |
-
-## Development
-
-To customize the RAG pipeline, you can:
-
-1. Configure Dagster assets for your ETL workflows and scheduling needs
-2. Modify the Elasticsearch and Neo4j configurations for your specific data sources
-3. Create custom retrieval pipelines in the `rag_pipeline` directory
-4. Connect your data sources to the system (currently supports Google Drive, with more integrations coming soon)
+| `SLACK_BOT_ID` | Slack Bot User ID | - |
+| `LLM_MODEL` | Default model for Slack bot | gpt-4o-mini |
+| `DEFAULT_MODEL` | Default model for OpenWebUI | gpt-4o |
 
 ## Testing
 
@@ -174,6 +187,15 @@ You can also run tests for individual components:
 - Python 3.11
 - pytest, pytest-asyncio, pytest-cov
 - Component-specific dependencies (installed automatically by the test script)
+
+## Development
+
+To customize the RAG pipeline, you can:
+
+1. Configure Dagster assets for your ETL workflows and scheduling needs
+2. Modify the Elasticsearch and Neo4j configurations for your specific data sources
+3. Create custom retrieval pipelines in the `rag_pipeline` directory
+4. Connect your data sources to the system (currently supports Google Drive, with more integrations coming soon)
 
 ## Data Sources
 

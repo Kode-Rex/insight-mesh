@@ -9,15 +9,15 @@ services:
       - PORT=3000
       - WEBUI_AUTH_ENABLED=true
       - WEBUI_DB_BACKEND=postgres
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DATABASE=openwebui
-      - DEFAULT_MODEL=gpt-4o
-      - OPENAI_API_KEY=sk-litellm-master-key-123456
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      - DEFAULT_MODEL=${DEFAULT_MODEL}
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
       - OPENAI_API_BASE_URL=http://caddy:80/v1
-      - OPENAI_API_MODELS=gpt-4,gpt-4o
+      - OPENAI_API_MODELS=${OPENAI_API_MODELS}
       - ENABLE_SIGNUP=true
       - ENABLE_OAUTH_SIGNUP=true
       - ENABLE_LOGIN_FORM=false
@@ -27,7 +27,7 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_AUTH_ENABLED=true
-      - ALLOWED_EMAIL_DOMAIN=*
+      - ALLOWED_EMAIL_DOMAIN=${ALLOWED_EMAIL_DOMAIN}
       - GOOGLE_AUTO_REGISTER=true
     depends_on:
       litellm:
@@ -49,15 +49,15 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PORT=4000
       - MODEL_TYPE=openai
-      - LITELLM_MASTER_KEY=sk-litellm-master-key-123456
-      - LITELLM_SALT_KEY="semUmsej7yCU4XFEuegPB2Mj"
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/litellm
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       - STORE_MODEL_IN_DB=True
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - MCP_API_KEY=insight-mesh-mcp-abc-123
+      - MCP_API_KEY=${MCP_API_KEY}
       - PYTHONPATH=/app
-      - JWT_SECRET_KEY=your-super-secret-jwt-key-123  # Added JWT secret key
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
     volumes:
       - ./config/litellm_config.yaml:/app/config.yaml
       - ./rag_pipeline:/app/rag_pipeline
@@ -73,13 +73,13 @@ services:
   postgres:
     image: postgres:14
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=litellm
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -160,7 +160,7 @@ services:
   neo4j:
     image: neo4j:5.13.0
     environment:
-      - NEO4J_AUTH=neo4j/password
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_dbms_memory_pagecache_size=512M
       - NEO4J_dbms_memory_heap_initial__size=512M
       - NEO4J_dbms_memory_heap_max__size=512M
@@ -188,15 +188,15 @@ services:
   insight_postgres:
     image: postgres:14
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=insight_mesh
     ports:
       - "5433:5432"  # Using a different port to avoid conflicts
     volumes:
       - insight_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -213,14 +213,14 @@ services:
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/credentials.json
       - ELASTICSEARCH_HOST=elasticsearch
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=password
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       - POSTGRES_HOST=insight_postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DBNAME=insight_mesh
     volumes:
       - ./dagster_project:/app
@@ -236,14 +236,14 @@ services:
       context: ./mcp-server
       dockerfile: Dockerfile
     environment:
-      - MCP_API_KEY=insight-mesh-mcp-abc-123  # Set explicit value instead of env var
-      - JWT_SECRET_KEY=your-super-secret-jwt-key-123  # JWT secret key for token validation
-      - DB_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/openwebui
+      - MCP_API_KEY=${MCP_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DATABASE}
       - REDIS_URL=redis://redis:6379/0
       - ELASTICSEARCH_HOST=elasticsearch
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=password
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=9091
     ports:
@@ -261,11 +261,10 @@ services:
     environment:
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
-      # Extract Bot ID from token in entrypoint script
       - SLACK_BOT_ID=${SLACK_BOT_ID}
       - LLM_API_URL=http://litellm:4000/v1
-      - LLM_API_KEY=sk-litellm-master-key-123456
-      - LLM_MODEL=gpt-4o-mini
+      - LLM_API_KEY=${LITELLM_MASTER_KEY}
+      - LLM_MODEL=${LLM_MODEL}
     volumes:
       - ./slack-bot:/app
     command: ["python", "/app/app.py"]
