@@ -191,4 +191,27 @@ def get_docker_service_name(service_identifier, project_name):
                         return docker_svc
     
     # If no match found, return the original identifier
-    return service_identifier 
+    return service_identifier
+
+def get_service_id_for_docker_service(docker_service_name):
+    """
+    Convert a Docker service name to a service ID from config.json
+    
+    Args:
+        docker_service_name: The Docker service name
+        
+    Returns:
+        The matching service ID from config.json or the original Docker service name if no match found
+    """
+    config = get_config()
+    services = config.get("services", {})
+    
+    # Try to find a service with a matching container pattern
+    for service_id, service_info in services.items():
+        container_patterns = service_info.get("container_patterns", [])
+        for pattern in container_patterns:
+            if pattern in docker_service_name:
+                return service_id
+    
+    # If no match found, return the original Docker service name
+    return docker_service_name 
