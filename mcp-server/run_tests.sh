@@ -1,26 +1,39 @@
 #!/bin/bash
 
-# Navigate to the MCP server directory (if running from elsewhere)
-cd "$(dirname "$0")"
+# Exit on error
+set -e
 
-# Check if a virtual environment exists or create one
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python -m venv venv
+# Print commands being executed
+set -x
+
+# Check if we're in a virtual environment, if not try to activate it
+if [ -z "$VIRTUAL_ENV" ]; then
+    if [ -d "venv" ]; then
+        echo "Activating virtual environment..."
+        source venv/bin/activate
+    else
+        echo "No virtual environment found. Make sure dependencies are installed."
+    fi
 fi
 
-# Activate the virtual environment
-source venv/bin/activate
+# Run all tests with pytest
+echo "Running all tests..."
+python -m pytest -v
 
-# Install development dependencies
-echo "Installing development dependencies..."
-pip install -r requirements-dev.txt
+# Run specific tests if they exist
+if [ -f "test_web_assets.py" ]; then
+    echo "Running web assets tests..."
+    python test_web_assets.py
+fi
 
-# Run the tests with pytest
-echo "Running tests..."
-python -m pytest tests/ -v --cov=. --cov-report=term-missing
+if [ -f "test_rag_handler.py" ]; then
+    echo "Running RAG handler tests..."
+    python test_rag_handler.py
+fi
 
-# Deactivate virtual environment
-deactivate
+if [ -f "test_fast_mcp.py" ]; then
+    echo "Running FastMCP tests..."
+    python test_fast_mcp.py
+fi
 
-echo "Tests completed!" 
+echo "All tests completed!" 
