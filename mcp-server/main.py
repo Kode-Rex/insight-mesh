@@ -341,10 +341,10 @@ async def legacy_context_endpoint(
         
     except ValueError as e:
         logger.error(f"Validation error in legacy endpoint: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error in legacy endpoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.get("/health")
 async def health_check_endpoint() -> Dict[str, str]:
