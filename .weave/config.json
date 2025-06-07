@@ -89,6 +89,7 @@
         }
     },
     "tools":{
+        "registry": "https://tools.koderex.dev",
         "webcat": {
             "service": "webcat",
             "url": "TODO : look this up as per the `service list` command",
@@ -109,5 +110,8 @@
             "type": "search",
             "migration_tool": "index_settings"
         }
+    },
+    "secrets"{
+        "type": "env"
     }
 }
