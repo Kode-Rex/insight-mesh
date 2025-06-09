@@ -7,7 +7,7 @@ from rich.console import Console
 
 from .services import list_services, open_service, get_rag_logs
 from .config import get_project_name, get_docker_service_name
-from .docker_commands import run_command, run_service_up_with_feedback
+from .docker_commands import run_command, run_service_up_with_feedback, run_service_restart_with_feedback
 
 console = Console()
 
@@ -254,24 +254,27 @@ def service_down(ctx, service, volumes, remove_orphans):
     run_command(command, verbose)
 
 @service_group.command('restart')
-@click.argument('service', required=False)
+@click.argument('services', nargs=-1)
 @click.pass_context
-def service_restart(ctx, service):
+def service_restart(ctx, services):
     """Restart Docker Compose services"""
     project_name = get_project_name()
     verbose = ctx.obj.get('VERBOSE', False)
     
     command = ['docker', 'compose', '-p', project_name, 'restart']
-    if service:
-        # Translate service name
-        docker_service = get_docker_service_name(service, project_name)
-        if verbose and docker_service != service:
-            console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
-        command.append(docker_service)
+    if services:
+        # Translate service names from config to Docker Compose names
+        docker_services = []
+        for service in services:
+            docker_service = get_docker_service_name(service, project_name)
+            docker_services.append(docker_service)
+            if verbose and docker_service != service:
+                console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+        command.extend(docker_services)
     
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
     
-    run_command(command, verbose)
+    run_service_restart_with_feedback(command, project_name, verbose)
 
  
