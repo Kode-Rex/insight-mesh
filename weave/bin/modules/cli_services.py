@@ -8,11 +8,12 @@ from .config import get_project_name
 
 console = Console()
 
-@click.group('service')
+@click.group('service', invoke_without_command=True)
 @click.pass_context
 def service_group(ctx):
     """Manage Docker services"""
-    pass
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 @service_group.command('list')
 @click.option('--project-prefix', '-p', help='Project prefix for filtering services')
