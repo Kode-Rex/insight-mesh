@@ -16,10 +16,10 @@ def tool_group(ctx):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
-@tool_group.command('list')
+@tool_group.command('trusted')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
 @click.pass_context
-def tool_list(ctx, verbose):
+def tool_trusted(ctx, verbose):
     """List all trusted MCP tools"""
     list_tools(verbose)
 
@@ -131,14 +131,14 @@ def tool_install(ctx, server_name, verbose):
     """Test/install an MCP tool"""
     install_tool(server_name, verbose)
 
-@tool_group.command('installed')
+@tool_group.command('list')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
 @click.pass_context
-def tool_installed(ctx, verbose):
+def tool_list(ctx, verbose):
     """List MCP servers that are installed/configured
     
     This shows the servers that are actually installed and tracked in the weave config file,
-    as opposed to 'list' which shows all available servers in the MCP config.
+    as opposed to 'trusted' which shows all available servers in the MCP config.
     """
     verbose_flag = ctx.obj.get('VERBOSE', False) or verbose
     
@@ -150,7 +150,7 @@ def tool_installed(ctx, verbose):
         console.print("[yellow]No MCP servers are currently installed/configured in weave.[/yellow]")
         console.print(f"[blue]Weave config file: {Path.cwd() / '.weave' / 'config.json'}[/blue]")
         console.print("[blue]Use 'weave tool add <server-name>' to add tools[/blue]")
-        console.print("[blue]Use 'weave tool list' to see available tools[/blue]")
+        console.print("[blue]Use 'weave tool trusted' to see available tools[/blue]")
         return
     
     table = Table(title=f"Installed MCP Tools in Weave ({len(installed_tools)} configured)")
