@@ -12,11 +12,34 @@ console = Console()
 @click.command('logs')
 @click.option('--follow', '-f', is_flag=True, help='Follow logs')
 @click.option('--tail', '-n', default=100, help='Number of lines to show')
-@click.argument('service', required=False)
+@click.argument('service', required=False, metavar='[SERVICE]')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed logs without filtering')
 @click.pass_context
 def logs(ctx, follow, tail, service, verbose):
-    """View logs for services"""
+    """View logs for services
+    
+    SERVICE can be any Docker Compose service name, or use the special service 'rag' 
+    to view filtered RAG handler logs from the LiteLLM container.
+    
+    Examples:
+    
+    View all service logs:
+    weave logs
+    
+    View logs for a specific service:
+    weave logs litellm
+    
+    View RAG handler logs (filtered from LiteLLM):
+    weave logs rag
+    
+    Follow RAG logs in real-time:
+    weave logs rag --follow
+    """
+    # If no service specified and no flags provided, show help
+    if not service and not follow and not verbose:
+        click.echo(ctx.get_help())
+        return
+    
     project_name = get_project_name()
     ctx_verbose = ctx.obj.get('VERBOSE', False)
     
