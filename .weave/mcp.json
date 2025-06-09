@@ -14,7 +14,9 @@
           "PORT": "8000",
           "RATE_LIMIT_WINDOW": "60",
           "RATE_LIMIT_MAX_REQUESTS": "10"
-        }
+        },
+        "popular": true,
+        "description": "Web search service (Docker FastMCP SSE)"
       },
       "mcp-server": {
         "command": "docker",
@@ -24,7 +26,9 @@
           "-i",
           "mcp:latest"
         ],
-        "env": {}
+        "env": {},
+        "popular": true,
+        "description": "Project MCP server (Docker FastMCP SSE)"
       },
       "filesystem-docker": {
         "command": "docker",
@@ -36,7 +40,57 @@
           "/tmp:/workspace",
           "fastmcp/filesystem:latest"
         ],
-        "env": {}
+        "env": {},
+        "popular": true,
+        "description": "Dockerized filesystem access (FastMCP SSE)"
+      },
+      "postgres-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "--network",
+          "host",
+          "fastmcp/postgres:latest"
+        ],
+        "env": {
+          "PGHOST": "localhost",
+          "PGPORT": "5432",
+          "PGDATABASE": "your-db",
+          "PGUSER": "your-user",
+          "PGPASSWORD": "your-password"
+        },
+        "popular": true,
+        "description": "Dockerized PostgreSQL access (FastMCP SSE)"
+      },
+      "github-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "fastmcp/github:latest"
+        ],
+        "env": {
+          "GITHUB_TOKEN": "your-github-token"
+        },
+        "popular": true,
+        "description": "Dockerized GitHub access (FastMCP SSE)"
+      },
+      "search-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "fastmcp/search:latest"
+        ],
+        "env": {
+          "SEARCH_API_KEY": "your-search-api-key"
+        },
+        "popular": true,
+        "description": "Dockerized web search (FastMCP SSE)"
       }
     }
   }
