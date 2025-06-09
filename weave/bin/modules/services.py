@@ -14,111 +14,128 @@ from .docker_commands import extract_urls
 console = Console()
 
 def list_services(project_name, verbose=False, debug=False):
-    """List all running Docker services with URLs"""
+    """List all configured services with their status"""
     prefix = project_name
+    
+    # Always start by reading the config file
+    config = get_config()
+    configured_services = config.get("services", {})
     
     if debug:
         console.print("[bold]Config:[/bold]")
-        console.print(get_config())
+        console.print(config)
     
-    # Get running containers with the project prefix
-    command = f"docker ps --format '{{{{.ID}}}}|{{{{.Names}}}}|{{{{.Ports}}}}|{{{{.Image}}}}' | grep {prefix}"
-    
-    if verbose or debug:
-        console.print(f"[bold blue]Running:[/bold blue] {command}")
-    
-    result = subprocess.run(command, capture_output=True, text=True, shell=True)
-    
-    if result.returncode != 0 and result.returncode != 1:  # grep returns 1 if no matches
-        console.print(f"[bold red]Error:[/bold red] {result.stderr}")
+    if not configured_services:
+        console.print("[yellow]No services configured in .weave/config.json[/yellow]")
         return
     
-    if not result.stdout.strip():
-        console.print("[yellow]No services found.[/yellow]")
-        return
+    # Try to get running containers, but don't fail if Docker is unavailable
+    running_containers = {}
+    docker_available = True
     
-    # Group containers by service
-    services = {}
-    
-    for line in result.stdout.strip().split('\n'):
-        if not line:
-            continue
+    try:
+        command = f"docker ps --format '{{{{.ID}}}}|{{{{.Names}}}}|{{{{.Ports}}}}|{{{{.Image}}}}' | grep {prefix}"
         
-        parts = line.split('|')
-        if len(parts) >= 4:
-            container_id, container_name, ports, image = parts[0], parts[1], parts[2], parts[3]
-            
-            if debug:
-                console.print(f"[cyan]Processing container:[/cyan] {container_name} / {image}")
-            
-            # Get service info
-            service_id, service_info = get_service_for_container(container_name, image)
-            
-            if debug:
-                if service_id:
-                    console.print(f"[green]  Matched service:[/green] {service_id}")
-                else:
-                    console.print(f"[yellow]  No match found[/yellow]")
-            
-            # If no service found, create a generic one
-            if not service_id:
-                service_id = f"unknown-{container_name}"
-                service_info = {
-                    "display_name": container_name,
-                    "description": "Unknown service"
-                }
-            
-            # Extract URLs
-            urls = extract_urls(ports)
-            
-            # Add to services dict
-            if service_id not in services:
-                services[service_id] = {
-                    "display_name": service_info.get("display_name", service_id),
-                    "description": service_info.get("description", ""),
-                    "containers": [],
-                    "urls": set()
-                }
-            
-            services[service_id]["containers"].append({
-                "id": container_id,
-                "name": container_name,
-                "image": image,
-                "ports": ports,
-                "urls": urls
-            })
-            
-            # Add URLs to set
-            for url in urls:
-                services[service_id]["urls"].add(url)
+        if verbose or debug:
+            console.print(f"[bold blue]Running:[/bold blue] {command}")
+        
+        result = subprocess.run(command, capture_output=True, text=True, shell=True)
+        
+        if result.returncode == 0:
+            # Parse running containers
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                
+                parts = line.split('|')
+                if len(parts) >= 4:
+                    container_id, container_name, ports, image = parts[0], parts[1], parts[2], parts[3]
+                    
+                    if debug:
+                        console.print(f"[cyan]Processing container:[/cyan] {container_name} / {image}")
+                    
+                    # Get service info
+                    service_id, service_info = get_service_for_container(container_name, image)
+                    
+                    if debug:
+                        if service_id:
+                            console.print(f"[green]  Matched service:[/green] {service_id}")
+                        else:
+                            console.print(f"[yellow]  No match found[/yellow]")
+                    
+                    if service_id:
+                        # Extract URLs
+                        urls = extract_urls(ports)
+                        
+                        if service_id not in running_containers:
+                            running_containers[service_id] = {
+                                "containers": [],
+                                "urls": set()
+                            }
+                        
+                        running_containers[service_id]["containers"].append({
+                            "id": container_id,
+                            "name": container_name,
+                            "image": image,
+                            "ports": ports,
+                            "urls": urls
+                        })
+                        
+                        # Add URLs to set
+                        for url in urls:
+                            running_containers[service_id]["urls"].add(url)
+        
+    except Exception as e:
+        docker_available = False
+        if debug:
+            console.print(f"[yellow]Docker not available: {e}[/yellow]")
     
-    # Display results
-    table = Table("Service", "Display Name", "Description", "Containers", "URLs")
+    # Build services table from config, enriched with running container info
+    table = Table("Service", "Display Name", "Description", "Status", "URLs")
     
-    for service_id, info in sorted(services.items()):
-        container_names = [c["name"] for c in info["containers"]]
-        urls = list(info["urls"])
+    for service_id, service_info in sorted(configured_services.items()):
+        display_name = service_info.get("display_name", service_id)
+        description = service_info.get("description", "")
+        
+        # Check if service is running
+        if service_id in running_containers:
+            status = "[green]Running[/green]"
+            urls = list(running_containers[service_id]["urls"])
+            url_display = "\n".join(urls) if urls else "N/A"
+        else:
+            if docker_available:
+                status = "[red]Offline[/red]"
+            else:
+                status = "[yellow]Unknown (Docker unavailable)[/yellow]"
+            url_display = "N/A"
         
         table.add_row(
             service_id,
-            info["display_name"],
-            info["description"] or "-",
-            "\n".join(container_names),
-            "\n".join(urls) if urls else "N/A"
+            display_name,
+            description or "-",
+            status,
+            url_display
         )
     
     console.print(table)
+    
+    if not docker_available:
+        console.print("\n[yellow]⚠ Docker is not available - service status may not be accurate[/yellow]")
+        console.print("[blue]Start Docker and run the command again for live status[/blue]")
 
-    # If verbose, also show detailed container information
-    if verbose:
+    # If verbose, also show detailed container information for running services
+    if verbose and running_containers:
         console.print("\n[bold]Detailed Container Information:[/bold]")
         
-        for service_id, info in services.items():
-            console.print(f"\n[bold cyan]{info['display_name']} ({service_id})[/bold cyan]")
+        for service_id, container_info in running_containers.items():
+            service_info = configured_services.get(service_id, {})
+            display_name = service_info.get("display_name", service_id)
+            
+            console.print(f"\n[bold cyan]{display_name} ({service_id})[/bold cyan]")
             
             container_table = Table("Container ID", "Container Name", "Image", "Ports", "URLs")
             
-            for container in info["containers"]:
+            for container in container_info["containers"]:
                 container_table.add_row(
                     container["id"],
                     container["name"],
