@@ -123,13 +123,7 @@ def tool_remove(ctx, server_name, yes):
     
     remove_tool(server_name)
 
-@tool_group.command('install')
-@click.argument('server_name')
-@click.option('--verbose', '-v', is_flag=True, help='Show detailed installation output')
-@click.pass_context
-def tool_install(ctx, server_name, verbose):
-    """Test/install an MCP tool"""
-    install_tool(server_name, verbose)
+
 
 @tool_group.command('list')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
