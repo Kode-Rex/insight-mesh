@@ -25,11 +25,12 @@ def service_group(ctx):
 @click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
 @click.option('--volume', '-v', multiple=True, help='Volume mappings in HOST:CONTAINER format')
 @click.option('--depends-on', multiple=True, help='Services this service depends on')
+@click.option('--parent', help='Parent service that will depend on this service (useful for databases)')
 @click.option('--restart', default='unless-stopped', help='Restart policy (default: unless-stopped)')
 @click.option('--description', help='Description of the service')
 @click.option('--display-name', help='Human-readable display name for the service')
 @click.pass_context
-def service_add(ctx, service_name, image, port, env, volume, depends_on, restart, description, display_name):
+def service_add(ctx, service_name, image, port, env, volume, depends_on, parent, restart, description, display_name):
     """Add a new service to docker-compose.yml and .weave/config.json"""
     verbose = ctx.obj.get('VERBOSE', False)
     
@@ -118,6 +119,20 @@ def service_add(ctx, service_name, image, port, env, volume, depends_on, restart
     # Add the service to config data
     config_data['services'][service_name] = weave_service_config
     
+    # Handle parent relationship - add this service as a dependency of the parent
+    if parent:
+        if parent in config_data['services']:
+            parent_config = config_data['services'][parent]
+            # Initialize depends_on if it doesn't exist
+            if 'depends_on' not in parent_config:
+                parent_config['depends_on'] = []
+            # Add this service as a dependency if not already present
+            if service_name not in parent_config['depends_on']:
+                parent_config['depends_on'].append(service_name)
+                console.print(f"[green]Added '{service_name}' as dependency of '{parent}'[/green]")
+        else:
+            console.print(f"[yellow]Warning: Parent service '{parent}' not found in config[/yellow]")
+    
     # Write back to docker-compose.yml
     try:
         with open(compose_file, 'w') as f:
@@ -155,6 +170,8 @@ def service_add(ctx, service_name, image, port, env, volume, depends_on, restart
             console.print(f"  Volumes: {', '.join(volume)}")
         if depends_on:
             console.print(f"  Depends on: {', '.join(depends_on)}")
+        if parent:
+            console.print(f"  Parent service: {parent}")
         console.print(f"  Restart policy: {restart}")
     
     console.print(f"[blue]Run 'weave service up {service_name}' to start the service[/blue]")
