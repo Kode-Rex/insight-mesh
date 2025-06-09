@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import get_project_name, get_docker_service_name, get_service_id_for_docker_service
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
-from .tools import list_tools, add_tool, remove_tool, install_tool, show_popular_tools, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
+from .tools import list_tools, add_tool, remove_tool, install_tool, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
 
 # Load environment variables
 load_dotenv()
@@ -213,21 +213,7 @@ def status(ctx):
             console.print("[yellow]Showing raw output:[/yellow]")
             console.print(result.stdout)
 
-@cli.command('config')
-@click.pass_context
-def config(ctx):
-    """Show the Docker Compose configuration"""
-    command = ['docker', 'compose', '-p', PROJECT_NAME, 'config']
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    with console.status("[bold blue]Fetching configuration...", spinner="dots"):
-        result = subprocess.run(command, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
-            return
-        
-        console.print(result.stdout)
+
 
 @cli.group('service')
 @click.pass_context
@@ -265,7 +251,7 @@ def tool_group(ctx):
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
 @click.pass_context
 def tool_list(ctx, verbose):
-    """List all configured MCP tools"""
+    """List all trusted MCP tools"""
     list_tools(verbose)
 
 @tool_group.command('add')
@@ -308,8 +294,7 @@ def tool_add(ctx, server_name, command, args, env, type, endpoint, version, desc
         
         if server_name not in popular_tools:
             console.print(f"[red]'{server_name}' is not a popular tool.[/red]")
-            console.print("[yellow]Available popular tools:[/yellow]")
-            show_popular_tools()
+            console.print("[yellow]Use 'weave tool list' to see available tools.[/yellow]")
             return
         
         tool_info = popular_tools[server_name]
@@ -404,11 +389,7 @@ def tool_install(ctx, server_name, verbose):
     """Test/install an MCP tool"""
     install_tool(server_name, verbose)
 
-@tool_group.command('popular')
-@click.pass_context
-def tool_popular(ctx):
-    """Show available popular MCP tools"""
-    show_popular_tools()
+
 
 @tool_group.command('installed')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')

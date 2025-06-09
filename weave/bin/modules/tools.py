@@ -123,7 +123,7 @@ def save_mcp_config(config):
         return False
 
 def list_tools(verbose=False):
-    """List all available MCP tools from configuration"""
+    """List all trusted MCP tools from configuration"""
     config = load_mcp_config()
     servers = config.get("mcpServers", {})
     
@@ -132,7 +132,7 @@ def list_tools(verbose=False):
         console.print(f"[yellow]Configuration file location: {get_mcp_config_path()}[/yellow]")
         return
     
-    table = Table(title="Available MCP Tools")
+    table = Table(title="Trusted MCP Tools")
     table.add_column("Tool Name", style="cyan", no_wrap=True)
     table.add_column("Type", style="blue", no_wrap=True)
     table.add_column("Image/Endpoint", style="green")
@@ -460,97 +460,4 @@ def install_tool(server_name, verbose=False):
             console.print(f"[red]✗ Error testing MCP server '{server_name}': {e}[/red]")
             return False
 
-def show_popular_tools():
-    """Show available popular MCP tools"""
-    config = load_mcp_config()
-    servers = config.get("mcpServers", {})
-    
-    # Filter only popular tools
-    popular_tools = {name: server_config for name, server_config in servers.items() 
-                    if server_config.get("popular", False)}
-    
-    if not popular_tools:
-        console.print("[yellow]No popular tools found in configuration.[/yellow]")
-        return
-    
-    table = Table(title="Popular MCP Tools")
-    table.add_column("Tool Name", style="cyan", no_wrap=True)
-    table.add_column("Type", style="blue", no_wrap=True)
-    table.add_column("Image/Endpoint", style="green")
-    table.add_column("Version", style="magenta")
-    table.add_column("Environment Variables", style="blue")
-    table.add_column("Description", style="yellow")
-    
-    for tool_name, tool_info in popular_tools.items():
-        server_type = tool_info.get("type", "docker")  # Default to docker for backward compatibility
-        
-        if server_type == "cloud":
-            # Cloud-hosted MCP server
-            image_or_endpoint = tool_info.get("endpoint", "N/A")
-            version = tool_info.get("version", "N/A")
-        else:
-            # Docker-based MCP server
-            # Extract docker image and version
-            docker_image = "N/A"
-            version = "latest"
-            
-            command = tool_info.get("command")
-            args = tool_info.get("args", [])
-            
-            if command == "docker" and args and "run" in args:
-                # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
-                for part in reversed(args):  # Start from the end as image is usually last
-                    # Skip flags and options
-                    if part.startswith("-") or "=" in part:
-                        continue
-                    # Look for image patterns (contains / or :, doesn't start with -)
-                    if ("/" in part or ":" in part) and not part.startswith("-"):
-                        docker_image = part
-                        if ":" in docker_image:
-                            image_parts = docker_image.split(":")
-                            docker_image = image_parts[0]
-                            version = image_parts[1]
-                        break
-                    # Also check for simple image names without / or :
-                    elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
-                        # This might be a simple image name like "mcp:latest"
-                        if ":" in part:
-                            image_parts = part.split(":")
-                            docker_image = image_parts[0]
-                            version = image_parts[1]
-                        else:
-                            docker_image = part
-                        break
-            
-            image_or_endpoint = docker_image
-        
-        # Format environment variables for display (show only required var names)
-        env_vars = tool_info.get("env", {})
-        env_vars_display = []
-        if env_vars:
-            for key, value in env_vars.items():
-                # Mark as required if value is empty, starts with "your-", or contains placeholder text
-                is_required = (not value or 
-                             str(value).startswith("your-") or 
-                             "your-" in str(value).lower() or
-                             str(value) in ["", "placeholder", "required"])
-                
-                if is_required:
-                    env_vars_display.append(f"{key}*")
-                else:
-                    env_vars_display.append(key)
-        
-        env_display = ", ".join(env_vars_display) if env_vars_display else "None"
-        
-        table.add_row(
-            tool_name,
-            server_type.title(),
-            image_or_endpoint,
-            version,
-            env_display,
-            tool_info.get("description", "N/A")
-        )
-    
-    console.print(table)
-    console.print("\n[blue]Use 'weave tool add <tool-name> --popular' to add a popular tool[/blue]")
-    console.print("[blue]Use 'weave tool add --help' for custom tool configuration[/blue]") 
+ 
