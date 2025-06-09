@@ -15,6 +15,7 @@ from pathlib import Path
 from .config import get_project_name, get_docker_service_name, get_service_id_for_docker_service
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
+from .tools import list_tools, add_tool, remove_tool, install_tool, show_popular_tools, get_popular_tools, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
 
 # Load environment variables
 load_dotenv()
@@ -252,4 +253,255 @@ def service_open(ctx, service_identifier):
     """Open a service in the browser"""
     verbose = ctx.obj.get('VERBOSE', False)
     
-    open_service(PROJECT_NAME, service_identifier, verbose) 
+    open_service(PROJECT_NAME, service_identifier, verbose)
+
+@cli.group('tool')
+@click.pass_context
+def tool_group(ctx):
+    """Manage MCP (Model Context Protocol) tools"""
+    pass
+
+@tool_group.command('list')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
+@click.pass_context
+def tool_list(ctx, verbose):
+    """List all configured MCP tools"""
+    list_tools(verbose)
+
+@tool_group.command('add')
+@click.argument('server_name')
+@click.option('--command', '-c', help='Command to run the MCP server')
+@click.option('--args', '-a', multiple=True, help='Arguments for the command (can be used multiple times)')
+@click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format (can be used multiple times)')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing server configuration')
+@click.option('--popular', '-p', is_flag=True, help='Add from popular tools list')
+@click.pass_context
+def tool_add(ctx, server_name, command, args, env, force, popular):
+    """Add a new MCP tool to the configuration
+    
+    Examples:
+    
+    Add a popular tool:
+    weave tool add filesystem --popular
+    
+    Add a custom tool:
+    weave tool add my-server --command npx --args @my/mcp-server --env API_KEY=secret
+    
+    Add filesystem tool with custom path:
+    weave tool add my-files --command npx --args @modelcontextprotocol/server-filesystem --args /home/user/docs
+    """
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    if popular:
+        # Add from popular tools
+        popular_tools = get_popular_tools()
+        if server_name not in popular_tools:
+            console.print(f"[red]'{server_name}' is not a popular tool.[/red]")
+            console.print("[yellow]Available popular tools:[/yellow]")
+            show_popular_tools()
+            return
+        
+        tool_info = popular_tools[server_name]
+        
+        # For tools that need setup arguments, prompt user
+        if tool_info.get("setup_args"):
+            console.print(f"[yellow]Tool '{server_name}' requires additional setup:[/yellow]")
+            for arg in tool_info["setup_args"]:
+                if arg.startswith("<") and arg.endswith(">"):
+                    # This is a placeholder, prompt user
+                    value = click.prompt(f"Enter value for {arg}")
+                    tool_info["args"].append(value)
+                else:
+                    tool_info["args"].append(arg)
+        
+        # Check if environment variables need to be set
+        if tool_info.get("env"):
+            needs_setup = any("your-" in v for v in tool_info["env"].values())
+            if needs_setup:
+                console.print(f"[yellow]Tool '{server_name}' requires environment variables to be configured.[/yellow]")
+                console.print("[yellow]Please edit the configuration file after adding to set proper values.[/yellow]")
+        
+        success = add_tool(
+            server_name,
+            tool_info["command"],
+            tool_info["args"],
+            tool_info["env"],
+            force
+        )
+        
+        if success and verbose:
+            console.print(f"[blue]Added popular tool: {tool_info['description']}[/blue]")
+    
+    else:
+        # Add custom tool
+        if not command:
+            console.print("[red]--command is required when not using --popular[/red]")
+            return
+        
+        # Parse environment variables
+        env_dict = {}
+        for env_var in env:
+            if '=' not in env_var:
+                console.print(f"[red]Invalid environment variable format: {env_var}. Use KEY=VALUE[/red]")
+                return
+            key, value = env_var.split('=', 1)
+            env_dict[key] = value
+        
+        success = add_tool(server_name, command, list(args), env_dict, force)
+        
+        if success and verbose:
+            console.print(f"[blue]Added custom MCP server with command: {command}[/blue]")
+
+@tool_group.command('remove')
+@click.argument('server_name')
+@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
+@click.pass_context
+def tool_remove(ctx, server_name, yes):
+    """Remove an MCP tool from the configuration"""
+    if not yes:
+        if not click.confirm(f"Are you sure you want to remove '{server_name}'?"):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+    
+    remove_tool(server_name)
+
+@tool_group.command('install')
+@click.argument('server_name')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed installation output')
+@click.pass_context
+def tool_install(ctx, server_name, verbose):
+    """Test/install an MCP tool"""
+    install_tool(server_name, verbose)
+
+@tool_group.command('popular')
+@click.pass_context
+def tool_popular(ctx):
+    """Show available popular MCP tools"""
+    show_popular_tools()
+
+@tool_group.command('installed')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
+@click.pass_context
+def tool_installed(ctx, verbose):
+    """List MCP servers that are installed/configured
+    
+    This shows the servers that are actually installed and tracked in the weave config file,
+    as opposed to 'list' which shows all available servers in the MCP config and 'popular' 
+    which shows servers available for installation.
+    """
+    from .tools import get_weave_config
+    
+    verbose_flag = ctx.obj.get('VERBOSE', False) or verbose
+    
+    # Read from weave config instead of MCP config
+    weave_config = get_weave_config()
+    installed_tools = weave_config.get("mcp", {}).get("tools", {})
+    
+    if not installed_tools:
+        console.print("[yellow]No MCP servers are currently installed/configured in weave.[/yellow]")
+        console.print(f"[blue]Weave config file: {Path.cwd() / '.weave' / 'config.json'}[/blue]")
+        console.print("[blue]Use 'weave tool add <server-name> --popular' to install popular tools[/blue]")
+        console.print("[blue]Use 'weave tool popular' to see available tools[/blue]")
+        return
+    
+    table = Table(title=f"Installed MCP Tools in Weave ({len(installed_tools)} configured)")
+    table.add_column("Tool Name", style="cyan", no_wrap=True)
+    table.add_column("Service", style="magenta", no_wrap=True)
+    table.add_column("Description", style="green")
+    table.add_column("URL", style="yellow")
+    
+    if verbose_flag:
+        table.add_column("Permissions", style="blue")
+    
+    for tool_name, tool_config in installed_tools.items():
+        service = tool_config.get("service", "N/A")
+        description = tool_config.get("description", "No description")
+        url = tool_config.get("url", "Not configured")
+        permissions = tool_config.get("permissions", [])
+        
+        row_data = [tool_name, service, description, url]
+        
+        if verbose_flag:
+            perm_display = ", ".join(permissions) if permissions else "None"
+            row_data.append(perm_display)
+        
+        table.add_row(*row_data)
+    
+    console.print(table)
+    
+    if verbose_flag:
+        console.print(f"\n[blue]Weave config file: {Path.cwd() / '.weave' / 'config.json'}[/blue]")
+        console.print(f"[blue]Total tools installed in weave: {len(installed_tools)}[/blue]")
+        
+        # Show services breakdown
+        services = set(tool.get("service", "unknown") for tool in installed_tools.values())
+        console.print(f"[blue]Services used: {', '.join(services)}[/blue]")
+
+@tool_group.command('config')
+@click.option('--path', '-p', help='Set the MCP configuration file path')
+@click.option('--show', '-s', is_flag=True, help='Show current MCP configuration path')
+@click.pass_context
+def tool_config(ctx, path, show):
+    """Configure MCP settings
+    
+    Examples:
+    
+    Show current MCP config path:
+    weave tool config --show
+    
+    Set MCP config path:
+    weave tool config --path /home/travisf/mcp.json
+    weave tool config --path ~/.cursor/mcp.json
+    """
+    if show:
+        current_path = get_mcp_config_path()
+        console.print(f"[blue]Current MCP configuration path:[/blue] {current_path}")
+        
+        # Check if path exists
+        if current_path.exists():
+            console.print(f"[green]✓ Configuration file exists[/green]")
+            try:
+                with open(current_path, 'r') as f:
+                    config = json.load(f)
+                    server_count = len(config.get('mcpServers', {}))
+                    console.print(f"[blue]Configured servers:[/blue] {server_count}")
+            except Exception as e:
+                console.print(f"[yellow]⚠ Error reading config: {e}[/yellow]")
+        else:
+            console.print(f"[yellow]⚠ Configuration file does not exist[/yellow]")
+        return
+    
+    if path:
+        # Expand user path (~) but keep relative paths relative
+        if path.startswith('~'):
+            config_path = Path(path).expanduser()
+            path_to_store = str(config_path)
+        else:
+            config_path = Path(path)
+            path_to_store = path
+        
+        # If it's a relative path, resolve it for validation but store the original
+        if not config_path.is_absolute():
+            resolved_path = Path.cwd() / config_path
+        else:
+            resolved_path = config_path
+        
+        # Validate the directory exists
+        if not resolved_path.parent.exists():
+            console.print(f"[red]Error: Directory {resolved_path.parent} does not exist[/red]")
+            return
+        
+        # Set the path in weave config (store original path format)
+        if set_mcp_config_path(path_to_store):
+            console.print(f"[green]MCP configuration path updated successfully[/green]")
+            
+            # If the file doesn't exist, offer to create it
+            if not resolved_path.exists():
+                if click.confirm(f"Configuration file doesn't exist at {resolved_path}. Create it?"):
+                    from .tools import create_sample_config
+                    create_sample_config(resolved_path)
+        else:
+            console.print(f"[red]Failed to update MCP configuration path[/red]")
+    else:
+        console.print("[yellow]Use --path to set the MCP configuration path or --show to display current path[/yellow]")
+        console.print("[yellow]Example: weave tool config --path ~/.cursor/mcp.json[/yellow]") 
