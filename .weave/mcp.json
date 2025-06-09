@@ -4,8 +4,10 @@
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
+          "--name", "mcp-webcat",
+          "-p", "8000:8000",
           "tmfrisinger/webcat:latest"
         ],
         "env": {
@@ -16,42 +18,45 @@
           "RATE_LIMIT_MAX_REQUESTS": "10"
         },
         "popular": true,
-        "description": "Web search service (Docker FastMCP SSE)"
+        "description": "A simple web search service that falls back to duckduckgo if there is no key"
       },
       "mcp-server": {
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
+          "--name", "mcp-server",
+          "-p", "3000:3000",
           "mcp:latest"
         ],
         "env": {},
         "popular": true,
-        "description": "Project MCP server (Docker FastMCP SSE)"
+        "description": "Project MCP server"
       },
       "filesystem-docker": {
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
-          "-v",
-          "/tmp:/workspace",
+          "--name", "mcp-filesystem",
+          "-v", "/tmp:/workspace",
+          "-p", "3001:3000",
           "fastmcp/filesystem:latest"
         ],
         "env": {},
         "popular": true,
-        "description": "Dockerized filesystem access (FastMCP SSE)"
+        "description": "Dockerized filesystem access"
       },
       "postgres-docker": {
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
-          "--network",
-          "host",
+          "--name", "mcp-postgres",
+          "--network", "host",
           "fastmcp/postgres:latest"
         ],
         "env": {
@@ -62,35 +67,39 @@
           "PGPASSWORD": "your-password"
         },
         "popular": true,
-        "description": "Dockerized PostgreSQL access (FastMCP SSE)"
+        "description": "Dockerized PostgreSQL access"
       },
       "github-docker": {
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
+          "--name", "mcp-github",
+          "-p", "3002:3000",
           "fastmcp/github:latest"
         ],
         "env": {
           "GITHUB_TOKEN": "your-github-token"
         },
         "popular": true,
-        "description": "Dockerized GitHub access (FastMCP SSE)"
+        "description": "Dockerized GitHub access"
       },
       "search-docker": {
         "command": "docker",
         "args": [
           "run",
+          "-d",
           "--rm",
-          "-i",
+          "--name", "mcp-search",
+          "-p", "3003:3000",
           "fastmcp/search:latest"
         ],
         "env": {
           "SEARCH_API_KEY": "your-search-api-key"
         },
         "popular": true,
-        "description": "Dockerized web search (FastMCP SSE)"
+        "description": "Dockerized web search"
       }
     }
   }
