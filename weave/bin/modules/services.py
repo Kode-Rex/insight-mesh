@@ -13,6 +13,88 @@ from .docker_commands import extract_urls
 
 console = Console()
 
+def _display_services_with_dependencies(configured_services, running_containers, docker_available):
+    """Display services in a table format showing dependencies with hierarchical structure"""
+    
+    # Separate services into main services and dependencies
+    main_services = []
+    dependency_services = set()
+    
+    # First pass: identify which services are dependencies
+    for service_id, service_info in configured_services.items():
+        depends_on = service_info.get("depends_on", [])
+        for dep in depends_on:
+            dependency_services.add(dep)
+    
+    # Second pass: categorize services
+    for service_id, service_info in configured_services.items():
+        if service_id not in dependency_services:
+            main_services.append(service_id)
+    
+    # Sort main services
+    main_services.sort()
+    
+    # Build table with hierarchical rows
+    table = Table("Service", "Display Name", "Description", "URLs")
+    
+    # Add main services and their dependencies
+    for service_id in main_services:
+        service_info = configured_services[service_id]
+        _add_service_to_table(table, service_id, service_info, running_containers, docker_available, indent=0)
+        
+        # Add dependencies
+        depends_on = service_info.get("depends_on", [])
+        for dep_id in depends_on:
+            if dep_id in configured_services:
+                dep_info = configured_services[dep_id]
+                _add_service_to_table(table, dep_id, dep_info, running_containers, docker_available, indent=1)
+    
+    # Add standalone services (those that aren't main services and aren't dependencies)
+    standalone_services = []
+    for service_id in configured_services:
+        if service_id not in main_services and service_id not in dependency_services:
+            standalone_services.append(service_id)
+    
+    for service_id in sorted(standalone_services):
+        service_info = configured_services[service_id]
+        _add_service_to_table(table, service_id, service_info, running_containers, docker_available, indent=0)
+    
+    console.print(table)
+
+def _add_service_to_table(table, service_id, service_info, running_containers, docker_available, indent=0):
+    """Add a service row to the table with proper indentation and styling"""
+    display_name = service_info.get("display_name", service_id)
+    description = service_info.get("description", "")
+    
+    # Check if service is running and get status dot
+    if service_id in running_containers:
+        status_dot = "[green]●[/green]"
+        urls = list(running_containers[service_id]["urls"])
+        url_display = "\n".join(urls) if urls else "N/A"
+    else:
+        if docker_available:
+            status_dot = "[red]○[/red]"
+        else:
+            status_dot = "[yellow]?[/yellow]"
+        url_display = "N/A"
+    
+    # Format service name with indentation and connection lines
+    if indent == 0:
+        # Main service
+        service_display = f"{status_dot} {service_id}"
+        name_display = f"[bold]{display_name}[/bold]"
+    else:
+        # Dependency service with connection line
+        service_display = f"  └─ {status_dot} {service_id}"
+        name_display = f"[dim]{display_name}[/dim]"
+    
+    table.add_row(
+        service_display,
+        name_display,
+        description or "-",
+        url_display
+    )
+
 def list_services(project_name, verbose=False, debug=False):
     """List all configured services with their status"""
     prefix = project_name
@@ -90,34 +172,8 @@ def list_services(project_name, verbose=False, debug=False):
         if debug:
             console.print(f"[yellow]Docker not available: {e}[/yellow]")
     
-    # Build services table from config, enriched with running container info
-    table = Table("Service", "Display Name", "Description", "Status", "URLs")
-    
-    for service_id, service_info in sorted(configured_services.items()):
-        display_name = service_info.get("display_name", service_id)
-        description = service_info.get("description", "")
-        
-        # Check if service is running
-        if service_id in running_containers:
-            status = "[green]Running[/green]"
-            urls = list(running_containers[service_id]["urls"])
-            url_display = "\n".join(urls) if urls else "N/A"
-        else:
-            if docker_available:
-                status = "[red]Offline[/red]"
-            else:
-                status = "[yellow]Unknown (Docker unavailable)[/yellow]"
-            url_display = "N/A"
-        
-        table.add_row(
-            service_id,
-            display_name,
-            description or "-",
-            status,
-            url_display
-        )
-    
-    console.print(table)
+    # Build dependency tree and display services hierarchically
+    _display_services_with_dependencies(configured_services, running_containers, docker_available)
     
     if not docker_available:
         console.print("\n[yellow]⚠ Docker is not available - service status may not be accurate[/yellow]")
