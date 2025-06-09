@@ -218,6 +218,129 @@ def run_service_restart_with_feedback(command, project_name, verbose=False):
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         return False
 
+def run_service_down_with_feedback(command, project_name, verbose=False):
+    """Run docker compose down/stop with real-time feedback as services shut down"""
+    try:
+        # Determine if this is a stop or down command
+        is_down_command = 'down' in command
+        is_stop_command = 'stop' in command
+        
+        if is_down_command:
+            console.print("[bold red]Stopping and removing services...[/bold red]")
+        elif is_stop_command:
+            console.print("[bold red]Stopping services...[/bold red]")
+        else:
+            console.print("[bold red]Shutting down services...[/bold red]")
+        
+        # Extract the specific services being stopped from the command
+        expected_services = set()
+        
+        if is_stop_command:
+            # For stop command: ['docker', 'compose', '-p', project_name, 'stop', service1, service2, ...]
+            if len(command) > 5:  # If there are services specified after 'stop'
+                expected_services = set(command[5:])
+        elif is_down_command and len(command) > 5:
+            # For down command with specific services (less common but possible)
+            # Look for services that aren't flags
+            for arg in command[5:]:
+                if not arg.startswith('-'):
+                    expected_services.add(arg)
+        
+        # If no specific services, get all currently running services
+        if not expected_services:
+            ps_cmd = ['docker', 'compose', '-p', project_name, 'ps', '--format', 'json']
+            ps_result = subprocess.run(ps_cmd, capture_output=True, text=True)
+            
+            if ps_result.returncode == 0:
+                import json
+                try:
+                    for line in ps_result.stdout.strip().split('\n'):
+                        if line.strip():
+                            container_info = json.loads(line)
+                            service_name = container_info.get('Service', '')
+                            state = container_info.get('State', '')
+                            if state == 'running' and service_name:
+                                expected_services.add(service_name)
+                except json.JSONDecodeError:
+                    pass
+        
+        if not expected_services:
+            console.print("[blue]No running services to stop[/blue]")
+            return True
+        
+        # Run the docker compose command
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            console.print(f"[bold red]Error stopping services:[/bold red] {result.stderr}")
+            return False
+        
+        # Show any output from the command
+        if result.stdout.strip():
+            console.print(result.stdout.strip())
+        
+        # Monitor services as they shut down
+        console.print("[blue]Monitoring services as they shut down...[/blue]")
+        
+        offline_services = set()
+        max_attempts = 15  # Wait up to 15 seconds for shutdown
+        attempt = 0
+        
+        while attempt < max_attempts and len(offline_services) < len(expected_services):
+            # Check which services are still running
+            ps_cmd = ['docker', 'compose', '-p', project_name, 'ps', '--format', 'json']
+            ps_result = subprocess.run(ps_cmd, capture_output=True, text=True)
+            
+            if ps_result.returncode == 0:
+                import json
+                try:
+                    current_online = set()
+                    for line in ps_result.stdout.strip().split('\n'):
+                        if line.strip():
+                            container_info = json.loads(line)
+                            service_name = container_info.get('Service', '')
+                            state = container_info.get('State', '')
+                            
+                            # Track services that are still running
+                            if state == 'running' and service_name in expected_services:
+                                current_online.add(service_name)
+                    
+                    # Find newly stopped services
+                    newly_stopped = expected_services - current_online - offline_services
+                    for service_name in newly_stopped:
+                        console.print(f"[red]✓[/red] {service_name} has stopped")
+                        offline_services.add(service_name)
+                    
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, assume all services are stopped
+                    break
+            else:
+                # If ps command fails, assume all services are stopped
+                break
+            
+            if len(offline_services) < len(expected_services):
+                time.sleep(0.5)  # Shorter interval for shutdown monitoring
+                attempt += 1
+        
+        # Final status
+        if len(offline_services) == len(expected_services):
+            if is_down_command:
+                console.print(f"[bold green]All {len(expected_services)} services have been stopped and removed![/bold green]")
+            else:
+                console.print(f"[bold green]All {len(expected_services)} services have been stopped![/bold green]")
+        elif len(expected_services) > 0:
+            still_running = expected_services - offline_services
+            if still_running:
+                console.print(f"[yellow]Some services may still be shutting down: {', '.join(sorted(still_running))}[/yellow]")
+            else:
+                console.print(f"[bold green]Services have been stopped![/bold green]")
+        
+        return True
+        
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        return False
+
 def show_service_urls(project_name, services):
     """Show URLs for running services"""
     try:
