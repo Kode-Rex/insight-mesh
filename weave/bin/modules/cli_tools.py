@@ -9,11 +9,12 @@ from .tools import list_tools, add_tool, remove_tool, install_tool, set_mcp_conf
 
 console = Console()
 
-@click.group('tool')
+@click.group('tool', invoke_without_command=True)
 @click.pass_context
 def tool_group(ctx):
     """Manage MCP (Model Context Protocol) tools"""
-    pass
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 @tool_group.command('list')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
