@@ -35,7 +35,8 @@
             ],
             "container_patterns": [
                 "openwebui"
-            ]
+            ],
+            "depends_on": ["openwebui-db"]
         },
         "litellm": {
             "display_name": "LiteLLM",
@@ -45,7 +46,8 @@
             ],
             "container_patterns": [
                 "litellm"
-            ]
+            ],
+            "depends_on": ["litellm-db"]
         },
         "slack-bot": {
             "display_name": "Slack Bot",
@@ -65,7 +67,8 @@
             ],
             "container_patterns": [
                 "dagster"
-            ]
+            ],
+            "depends_on": ["dagster-db"]
         },
         "mcp": {
             "display_name": "MCP Server",
@@ -75,7 +78,8 @@
             ],
             "container_patterns": [
                 "mcp"
-            ]
+            ],
+            "depends_on": ["mcp-db"]
         },
         "dagster-db": {
             "display_name": "Dagster DB",
