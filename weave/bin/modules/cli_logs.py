@@ -24,16 +24,16 @@ def log(ctx, follow, tail, service, verbose):
     Examples:
     
     View all service logs:
-    weave logs
+    weave log
     
     View logs for a specific service:
-    weave logs litellm
+    weave log litellm
     
     View RAG handler logs (filtered from LiteLLM):
-    weave logs rag
+    weave log rag
     
     Follow RAG logs in real-time:
-    weave logs rag --follow
+    weave log rag --follow
     """
     # If no service specified and no flags provided, show help
     if not service and not follow and not verbose:
