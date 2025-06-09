@@ -20,21 +20,21 @@
         "popular": true,
         "description": "A simple web search service that falls back to duckduckgo if there is no key"
       },
-      "postgres-mcp": {
+      "postgres": {
         "command": "docker",
         "args": [
           "run",
           "-d",
           "--rm",
           "--name", "mcp-postgres",
-          "-p", "8001:8000",
+          "-p", "3001:3001",
           "crystaldba/postgres-mcp:latest"
         ],
         "env": {
-          "DATABASE_URI": "postgresql://username:password@host.docker.internal:5432/dbname"
+          "DATABASE_URL": "postgresql://user:password@host:port/database"
         },
         "popular": true,
-        "description": "Professional PostgreSQL MCP server with performance analysis and tuning"
+        "description": "Professional Postgres MCP server for database operations and analytics"
       },
       "browserbase": {
         "command": "docker",
@@ -43,7 +43,7 @@
           "-d",
           "--rm",
           "--name", "mcp-browserbase",
-          "-p", "8002:8000",
+          "-p", "3002:3002",
           "browserbase/mcp-server:latest"
         ],
         "env": {
@@ -51,7 +51,23 @@
           "BROWSERBASE_PROJECT_ID": "your-project-id"
         },
         "popular": true,
-        "description": "Cloud browser automation for web scraping and testing"
+        "description": "Browser automation and web scraping service for data extraction"
+      },
+      "github": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-d",
+          "--rm",
+          "--name", "mcp-github",
+          "-p", "3003:3003",
+          "modelcontextprotocol/server-github:latest"
+        ],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "your-github-token"
+        },
+        "popular": true,
+        "description": "GitHub repository management, file operations, and API integration"
       }
     }
   }
