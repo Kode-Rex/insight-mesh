@@ -154,7 +154,7 @@ def tool_list(ctx, verbose):
         return
     
     table = Table(title=f"Installed MCP Tools in Weave ({len(installed_tools)} configured)")
-    table.add_column("Tool Name", style="cyan", no_wrap=True)
+    table.add_column("Tool", style="cyan", no_wrap=True)
     table.add_column("Service", style="magenta", no_wrap=True)
     table.add_column("Description", style="green")
     table.add_column("URL", style="yellow")

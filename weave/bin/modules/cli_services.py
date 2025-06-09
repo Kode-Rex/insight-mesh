@@ -238,37 +238,4 @@ def service_restart(ctx, service):
     
     run_command(command, verbose)
 
-@service_group.command('status')
-@click.pass_context
-def service_status(ctx):
-    """Show status of Docker Compose services"""
-    project_name = get_project_name()
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    command = ['docker', 'compose', '-p', project_name, 'ps']
-    
-    if verbose:
-        console.print(f"[blue]Running: {' '.join(command)}[/blue]")
-    
-    with console.status("[bold blue]Fetching service status...", spinner="dots"):
-        result = subprocess.run(command, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            console.print(f"[bold red]Error:[/bold red] {result.stderr}")
-            return
-        
-        # Parse and display the output in a more readable format
-        lines = result.stdout.strip().split('\n')
-        if len(lines) > 1:  # Skip if only header
-            console.print("[bold blue]Service Status:[/bold blue]")
-            for line in lines:
-                if line.strip():
-                    # Color code based on status
-                    if 'Up' in line:
-                        console.print(f"[green]{line}[/green]")
-                    elif 'Exit' in line or 'Down' in line:
-                        console.print(f"[red]{line}[/red]")
-                    else:
-                        console.print(line)
-        else:
-            console.print("[yellow]No services are currently running[/yellow]") 
+ 
