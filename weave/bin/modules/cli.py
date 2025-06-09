@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import get_project_name, get_docker_service_name, get_service_id_for_docker_service
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
-from .tools import list_tools, add_tool, remove_tool, install_tool, show_popular_tools, get_popular_tools, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
+from .tools import list_tools, add_tool, remove_tool, install_tool, show_popular_tools, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
 
 # Load environment variables
 load_dotenv()
@@ -293,8 +293,12 @@ def tool_add(ctx, server_name, command, args, env, force, popular):
     verbose = ctx.obj.get('VERBOSE', False)
     
     if popular:
-        # Add from popular tools
-        popular_tools = get_popular_tools()
+        # Add from popular tools in MCP configuration
+        config = load_mcp_config()
+        servers = config.get("mcpServers", {})
+        popular_tools = {name: server_config for name, server_config in servers.items() 
+                        if server_config.get("popular", False)}
+        
         if server_name not in popular_tools:
             console.print(f"[red]'{server_name}' is not a popular tool.[/red]")
             console.print("[yellow]Available popular tools:[/yellow]")
@@ -303,20 +307,9 @@ def tool_add(ctx, server_name, command, args, env, force, popular):
         
         tool_info = popular_tools[server_name]
         
-        # For tools that need setup arguments, prompt user
-        if tool_info.get("setup_args"):
-            console.print(f"[yellow]Tool '{server_name}' requires additional setup:[/yellow]")
-            for arg in tool_info["setup_args"]:
-                if arg.startswith("<") and arg.endswith(">"):
-                    # This is a placeholder, prompt user
-                    value = click.prompt(f"Enter value for {arg}")
-                    tool_info["args"].append(value)
-                else:
-                    tool_info["args"].append(arg)
-        
         # Check if environment variables need to be set
         if tool_info.get("env"):
-            needs_setup = any("your-" in v for v in tool_info["env"].values())
+            needs_setup = any("your-" in str(v) for v in tool_info["env"].values())
             if needs_setup:
                 console.print(f"[yellow]Tool '{server_name}' requires environment variables to be configured.[/yellow]")
                 console.print("[yellow]Please edit the configuration file after adding to set proper values.[/yellow]")
@@ -330,7 +323,7 @@ def tool_add(ctx, server_name, command, args, env, force, popular):
         )
         
         if success and verbose:
-            console.print(f"[blue]Added popular tool: {tool_info['description']}[/blue]")
+            console.print(f"[blue]Added popular tool: {tool_info.get('description', 'N/A')}[/blue]")
     
     else:
         # Add custom tool
@@ -495,11 +488,10 @@ def tool_config(ctx, path, show):
         if set_mcp_config_path(path_to_store):
             console.print(f"[green]MCP configuration path updated successfully[/green]")
             
-            # If the file doesn't exist, offer to create it
+            # If the file doesn't exist, inform the user
             if not resolved_path.exists():
-                if click.confirm(f"Configuration file doesn't exist at {resolved_path}. Create it?"):
-                    from .tools import create_sample_config
-                    create_sample_config(resolved_path)
+                console.print(f"[yellow]Configuration file doesn't exist at {resolved_path}[/yellow]")
+                console.print("[yellow]Please create the configuration file manually or copy from an existing one[/yellow]")
         else:
             console.print(f"[red]Failed to update MCP configuration path[/red]")
     else:

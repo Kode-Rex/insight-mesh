@@ -93,8 +93,7 @@ def load_mcp_config():
     
     if not config_path.exists():
         console.print(f"[yellow]MCP configuration file not found at {config_path}[/yellow]")
-        console.print("[yellow]Creating a sample configuration file...[/yellow]")
-        create_sample_config(config_path)
+        console.print("[yellow]Please create the configuration file or use 'weave tool config --path' to set a different path[/yellow]")
         return {"mcpServers": {}}
     
     try:
@@ -123,44 +122,6 @@ def save_mcp_config(config):
         console.print(f"[red]Error saving MCP configuration file: {e}[/red]")
         return False
 
-def create_sample_config(config_path):
-    """Create a sample MCP configuration file with Docker-based FastMCP servers"""
-    sample_config = {
-        "mcpServers": {
-            "webcat": {
-                "command": "docker",
-                "args": ["run", "--rm", "-i", "tmfrisinger/webcat:latest"],
-                "env": {
-                    "SERPER_API_KEY": "your-serper-api-key",
-                    "WEBCAT_API_KEY": "your-webcat-api-key",
-                    "PORT": "8000",
-                    "RATE_LIMIT_WINDOW": "60",
-                    "RATE_LIMIT_MAX_REQUESTS": "10"
-                }
-            },
-            "mcp-server": {
-                "command": "docker",
-                "args": ["run", "--rm", "-i", "mcp:latest"],
-                "env": {}
-            },
-            "filesystem-docker": {
-                "command": "docker",
-                "args": ["run", "--rm", "-i", "-v", "/tmp:/workspace", "fastmcp/filesystem:latest"],
-                "env": {}
-            }
-        }
-    }
-    
-    try:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, 'w') as f:
-            json.dump(sample_config, f, indent=2)
-        console.print(f"[green]Sample Docker FastMCP configuration created at {config_path}[/green]")
-        console.print("[yellow]All tools are Docker-based FastMCP SSE servers.[/yellow]")
-        console.print("[yellow]Please edit the configuration file to customize Docker images and environment variables.[/yellow]")
-    except Exception as e:
-        console.print(f"[red]Error creating sample configuration: {e}[/red]")
-
 def list_tools(verbose=False):
     """List all available MCP tools from configuration"""
     config = load_mcp_config()
@@ -177,6 +138,7 @@ def list_tools(verbose=False):
     table.add_column("Status", style="yellow")
     table.add_column("Version", style="magenta")
     table.add_column("Environment Variables", style="blue")
+    table.add_column("Description", style="dim")
     
     for server_name, server_config in servers.items():
         command = server_config.get("command", "N/A")
@@ -245,7 +207,8 @@ def list_tools(verbose=False):
             docker_image,
             status,
             version,
-            env_display
+            env_display,
+            server_config.get("description", "N/A")
         )
     
     console.print(table)
@@ -413,104 +376,83 @@ def install_tool(server_name, verbose=False):
         console.print(f"[red]✗ Error testing MCP server '{server_name}': {e}[/red]")
         return False
 
-def get_popular_tools():
-    """Get a list of popular Docker-based FastMCP tools that can be easily added"""
-    return {
-        # Docker-based FastMCP SSE servers
-        "webcat": {
-            "description": "Web search service (Docker FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "tmfrisinger/webcat:latest"],
-            "env": {
-                "SERPER_API_KEY": "your-serper-api-key",
-                "WEBCAT_API_KEY": "your-webcat-api-key",
-                "PORT": "8000",
-                "RATE_LIMIT_WINDOW": "60",
-                "RATE_LIMIT_MAX_REQUESTS": "10"
-            },
-            "setup_args": [],
-            "type": "docker-fastmcp"
-        },
-        "mcp-server": {
-            "description": "Project MCP server (Docker FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "mcp:latest"],
-            "env": {},
-            "setup_args": [],
-            "type": "docker-fastmcp"
-        },
-        "filesystem-docker": {
-            "description": "Dockerized filesystem access (FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "-v", "/tmp:/workspace", "fastmcp/filesystem:latest"],
-            "env": {},
-            "setup_args": ["<host_directory_to_mount>"],
-            "type": "docker-fastmcp"
-        },
-        "postgres-docker": {
-            "description": "Dockerized PostgreSQL access (FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "--network", "host", "fastmcp/postgres:latest"],
-            "env": {
-                "PGHOST": "localhost",
-                "PGPORT": "5432",
-                "PGDATABASE": "your-db",
-                "PGUSER": "your-user",
-                "PGPASSWORD": "your-password"
-            },
-            "setup_args": [],
-            "type": "docker-fastmcp"
-        },
-        "github-docker": {
-            "description": "Dockerized GitHub access (FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "fastmcp/github:latest"],
-            "env": {
-                "GITHUB_TOKEN": "your-github-token"
-            },
-            "setup_args": [],
-            "type": "docker-fastmcp"
-        },
-        "search-docker": {
-            "description": "Dockerized web search (FastMCP SSE)",
-            "command": "docker",
-            "args": ["run", "--rm", "-i", "fastmcp/search:latest"],
-            "env": {
-                "SEARCH_API_KEY": "your-search-api-key"
-            },
-            "setup_args": [],
-            "type": "docker-fastmcp"
-        }
-    }
-
 def show_popular_tools():
     """Show available popular MCP tools"""
-    tools = get_popular_tools()
+    config = load_mcp_config()
+    servers = config.get("mcpServers", {})
+    
+    # Filter only popular tools
+    popular_tools = {name: server_config for name, server_config in servers.items() 
+                    if server_config.get("popular", False)}
+    
+    if not popular_tools:
+        console.print("[yellow]No popular tools found in configuration.[/yellow]")
+        return
     
     table = Table(title="Popular MCP Tools")
     table.add_column("Tool Name", style="cyan", no_wrap=True)
-    table.add_column("Type", style="magenta", no_wrap=True)
-    table.add_column("Description", style="green")
-    table.add_column("Required Setup", style="yellow")
+    table.add_column("Image", style="green")
+    table.add_column("Version", style="magenta")
+    table.add_column("Environment Variables", style="blue")
+    table.add_column("Description", style="yellow")
     
-    for tool_name, tool_info in tools.items():
-        setup_info = []
-        if tool_info.get("env"):
-            env_keys = [k for k in tool_info["env"].keys() if "your-" in tool_info["env"][k]]
-            if env_keys:
-                setup_info.append(f"Env: {', '.join(env_keys)}")
+    for tool_name, tool_info in popular_tools.items():
+        # Extract docker image and version
+        docker_image = "N/A"
+        version = "latest"
         
-        if tool_info.get("setup_args"):
-            setup_info.append(f"Args: {' '.join(tool_info['setup_args'])}")
+        command = tool_info.get("command")
+        args = tool_info.get("args", [])
         
-        setup_display = "; ".join(setup_info) if setup_info else "None"
-        server_type = tool_info.get("type", "unknown").upper()
+        if command == "docker" and args and "run" in args:
+            # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
+            for part in reversed(args):  # Start from the end as image is usually last
+                # Skip flags and options
+                if part.startswith("-") or "=" in part:
+                    continue
+                # Look for image patterns (contains / or :, doesn't start with -)
+                if ("/" in part or ":" in part) and not part.startswith("-"):
+                    docker_image = part
+                    if ":" in docker_image:
+                        image_parts = docker_image.split(":")
+                        docker_image = image_parts[0]
+                        version = image_parts[1]
+                    break
+                # Also check for simple image names without / or :
+                elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
+                    # This might be a simple image name like "mcp:latest"
+                    if ":" in part:
+                        image_parts = part.split(":")
+                        docker_image = image_parts[0]
+                        version = image_parts[1]
+                    else:
+                        docker_image = part
+                    break
+        
+        # Format environment variables for display (show only required var names)
+        env_vars = tool_info.get("env", {})
+        env_vars_display = []
+        if env_vars:
+            for key, value in env_vars.items():
+                # Mark as required if value is empty, starts with "your-", or contains placeholder text
+                is_required = (not value or 
+                             str(value).startswith("your-") or 
+                             "your-" in str(value).lower() or
+                             str(value) in ["", "placeholder", "required"])
+                
+                if is_required:
+                    env_vars_display.append(f"{key}*")
+                else:
+                    env_vars_display.append(key)
+        
+        env_display = ", ".join(env_vars_display) if env_vars_display else "None"
         
         table.add_row(
             tool_name,
-            server_type,
-            tool_info["description"],
-            setup_display
+            docker_image,
+            version,
+            env_display,
+            tool_info.get("description", "N/A")
         )
     
     console.print(table)
