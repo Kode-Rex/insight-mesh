@@ -67,7 +67,19 @@
           "GITHUB_PERSONAL_ACCESS_TOKEN": "your-github-token"
         },
         "popular": true,
-        "description": "GitHub repository management, file operations, and API integration"
+        "description": "GitHub repository management and API integration"
+      },
+      "atlassian-jira": {
+        "type": "cloud",
+        "endpoint": "https://mcp.atlassian.com",
+        "version": "1.0",
+        "env": {
+          "ATLASSIAN_API_TOKEN": "your-atlassian-api-token",
+          "ATLASSIAN_EMAIL": "your-email@company.com",
+          "ATLASSIAN_DOMAIN": "your-company.atlassian.net"
+        },
+        "popular": true,
+        "description": "Official Atlassian cloud MCP server for Jira and Confluence integration"
       }
     }
   }

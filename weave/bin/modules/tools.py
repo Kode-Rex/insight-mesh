@@ -134,22 +134,70 @@ def list_tools(verbose=False):
     
     table = Table(title="Available MCP Tools")
     table.add_column("Tool Name", style="cyan", no_wrap=True)
-    table.add_column("Image", style="green")
+    table.add_column("Type", style="blue", no_wrap=True)
+    table.add_column("Image/Endpoint", style="green")
     table.add_column("Status", style="yellow")
     table.add_column("Version", style="magenta")
     table.add_column("Environment Variables", style="blue")
     table.add_column("Description", style="dim")
     
     for server_name, server_config in servers.items():
+        server_type = server_config.get("type", "docker")  # Default to docker for backward compatibility
         command = server_config.get("command", "N/A")
         args = server_config.get("args", [])
         env_vars = server_config.get("env", {})
         
-        # Build full command string
-        full_command = f"{command} {' '.join(args)}" if args else command
-        
-        # Check if tool is available
-        status = check_tool_availability(command, args)
+        # Handle different server types
+        if server_type == "cloud":
+            # Cloud-hosted MCP server
+            endpoint = server_config.get("endpoint", "N/A")
+            image_or_endpoint = endpoint
+            status = check_cloud_tool_availability(endpoint)
+            version = server_config.get("version", "N/A")
+            
+        else:
+            # Docker-based MCP server (default)
+            # Build full command string
+            full_command = f"{command} {' '.join(args)}" if args else command
+            
+            # Check if tool is available
+            status = check_tool_availability(command, args)
+            
+            # Extract docker image and version from command
+            docker_image = "N/A"
+            version = "latest"
+            
+            if command == "docker" and args:
+                # Build full command to parse
+                full_command_parts = [command] + args
+                full_command_str = " ".join(full_command_parts)
+                
+                if "run" in full_command_parts:
+                    # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
+                    for part in reversed(args):  # Start from the end as image is usually last
+                        # Skip flags and options
+                        if part.startswith("-") or "=" in part:
+                            continue
+                        # Look for image patterns (contains / or :, doesn't start with -)
+                        if ("/" in part or ":" in part) and not part.startswith("-"):
+                            docker_image = part
+                            if ":" in docker_image:
+                                image_parts = docker_image.split(":")
+                                docker_image = image_parts[0]
+                                version = image_parts[1]
+                            break
+                        # Also check for simple image names without / or :
+                        elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
+                            # This might be a simple image name like "mcp:latest"
+                            if ":" in part:
+                                image_parts = part.split(":")
+                                docker_image = image_parts[0]
+                                version = image_parts[1]
+                            else:
+                                docker_image = part
+                            break
+            
+            image_or_endpoint = docker_image
         
         # Format environment variables for display (show only required var names)
         env_vars_display = []
@@ -168,43 +216,10 @@ def list_tools(verbose=False):
         
         env_display = ", ".join(env_vars_display) if env_vars_display else "None"
         
-        # Extract docker image and version from command
-        docker_image = "N/A"
-        version = "latest"
-        
-        if command == "docker" and args:
-            # Build full command to parse
-            full_command_parts = [command] + args
-            full_command_str = " ".join(full_command_parts)
-            
-            if "run" in full_command_parts:
-                # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
-                for part in reversed(args):  # Start from the end as image is usually last
-                    # Skip flags and options
-                    if part.startswith("-") or "=" in part:
-                        continue
-                    # Look for image patterns (contains / or :, doesn't start with -)
-                    if ("/" in part or ":" in part) and not part.startswith("-"):
-                        docker_image = part
-                        if ":" in docker_image:
-                            image_parts = docker_image.split(":")
-                            docker_image = image_parts[0]
-                            version = image_parts[1]
-                        break
-                    # Also check for simple image names without / or :
-                    elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
-                        # This might be a simple image name like "mcp:latest"
-                        if ":" in part:
-                            image_parts = part.split(":")
-                            docker_image = image_parts[0]
-                            version = image_parts[1]
-                        else:
-                            docker_image = part
-                        break
-        
         table.add_row(
             server_name,
-            docker_image,
+            server_type.title(),
+            image_or_endpoint,
             status,
             version,
             env_display,
@@ -212,10 +227,8 @@ def list_tools(verbose=False):
         )
     
     console.print(table)
-    
-    if verbose:
-        console.print(f"\n[blue]Configuration file: {get_mcp_config_path()}[/blue]")
-        console.print(f"[blue]Total servers configured: {len(servers)}[/blue]")
+    console.print(f"\n[blue]Configuration file: {get_mcp_config_path()}[/blue]")
+    console.print("[dim]* indicates required environment variables[/dim]")
 
 def check_tool_availability(command, args):
     """Check if a tool is available and can be executed"""
@@ -252,7 +265,14 @@ def check_tool_availability(command, args):
     except Exception:
         return "[yellow]Unknown[/yellow]"
 
-def add_tool(server_name, command, args=None, env=None, force=False):
+def check_cloud_tool_availability(endpoint):
+    """Check if a cloud-hosted MCP server is available"""
+    # For cloud-hosted MCP servers, we can't reliably check availability
+    # without proper authentication and MCP protocol handshake
+    # So we'll just return a neutral status
+    return "[blue]Cloud Service[/blue]"
+
+def add_tool(server_name, command=None, args=None, env=None, server_type="docker", endpoint=None, version=None, description=None, force=False):
     """Add a new MCP tool to the configuration"""
     config = load_mcp_config()
     
@@ -264,26 +284,56 @@ def add_tool(server_name, command, args=None, env=None, force=False):
         console.print(f"[yellow]Server '{server_name}' already exists. Use --force to overwrite.[/yellow]")
         return False
     
-    # Build server configuration
-    server_config = {
-        "command": command,
-        "args": args or [],
-        "env": env or {}
-    }
+    # Build server configuration based on type
+    if server_type == "cloud":
+        if not endpoint:
+            console.print("[red]Cloud-hosted servers require an endpoint URL[/red]")
+            return False
+            
+        server_config = {
+            "type": "cloud",
+            "endpoint": endpoint,
+            "env": env or {},
+            "version": version or "N/A",
+            "description": description or "Cloud-hosted MCP server"
+        }
+        
+        # Show the added configuration
+        panel_content = f"""
+[cyan]Server Name:[/cyan] {server_name}
+[cyan]Type:[/cyan] Cloud-hosted
+[cyan]Endpoint:[/cyan] {endpoint}
+[cyan]Version:[/cyan] {version or 'N/A'}
+[cyan]Environment Variables:[/cyan] {len(env or {})} configured
+        """
+        
+    else:
+        # Docker-based server (default)
+        if not command:
+            console.print("[red]Docker-based servers require a command[/red]")
+            return False
+            
+        server_config = {
+            "type": "docker",
+            "command": command,
+            "args": args or [],
+            "env": env or {},
+            "description": description or "Docker-based MCP server"
+        }
+        
+        # Show the added configuration
+        panel_content = f"""
+[cyan]Server Name:[/cyan] {server_name}
+[cyan]Type:[/cyan] Docker-based
+[cyan]Command:[/cyan] {command}
+[cyan]Arguments:[/cyan] {' '.join(args) if args else 'None'}
+[cyan]Environment Variables:[/cyan] {len(env or {})} configured
+        """
     
     config["mcpServers"][server_name] = server_config
     
     if save_mcp_config(config):
         console.print(f"[green]Successfully added MCP server '{server_name}'[/green]")
-        
-        # Show the added configuration
-        panel_content = f"""
-[cyan]Server Name:[/cyan] {server_name}
-[cyan]Command:[/cyan] {command}
-[cyan]Arguments:[/cyan] {' '.join(args) if args else 'None'}
-[cyan]Environment Variables:[/cyan] {len(env or {})} configured
-        """
-        
         console.print(Panel(panel_content.strip(), title="Added MCP Server", border_style="green"))
         return True
     else:
@@ -318,63 +368,97 @@ def install_tool(server_name, verbose=False):
         return False
     
     server_config = servers[server_name]
-    command = server_config.get("command")
-    args = server_config.get("args", [])
+    server_type = server_config.get("type", "docker")
     env_vars = server_config.get("env", {})
     
     console.print(f"[blue]Installing/testing MCP server: {server_name}[/blue]")
     
-    # Prepare environment
-    env = os.environ.copy()
-    env.update(env_vars)
+    if server_type == "cloud":
+        # Cloud-hosted MCP server
+        endpoint = server_config.get("endpoint")
+        
+        if verbose:
+            console.print(f"[blue]Type: Cloud-hosted[/blue]")
+            console.print(f"[blue]Endpoint: {endpoint}[/blue]")
+            console.print(f"[blue]Environment variables: {list(env_vars.keys())}[/blue]")
+        
+        # For cloud-hosted services, we can't really "install" or test them
+        # We can only verify the configuration is complete
+        console.print(f"[blue]Cloud MCP server '{server_name}' configuration:[/blue]")
+        console.print(f"[green]✓ Endpoint configured: {endpoint}[/green]")
+        
+        # Check if required environment variables are set
+        missing_vars = []
+        for key, value in env_vars.items():
+            if not value or str(value).startswith("your-") or "your-" in str(value).lower():
+                missing_vars.append(key)
+        
+        if missing_vars:
+            console.print(f"[yellow]⚠ Environment variables need configuration: {', '.join(missing_vars)}[/yellow]")
+            console.print("[yellow]Please set these variables in your environment or configuration file[/yellow]")
+        else:
+            console.print("[green]✓ All environment variables appear to be configured[/green]")
+        
+        console.print(f"[blue]Note: Cloud services require proper authentication and cannot be tested locally[/blue]")
+        return True
     
-    # Build command
-    full_command = [command] + args
-    
-    if verbose:
-        console.print(f"[blue]Command: {' '.join(full_command)}[/blue]")
-        console.print(f"[blue]Environment variables: {list(env_vars.keys())}[/blue]")
-    
-    try:
-        with console.status(f"[bold green]Testing {server_name}...", spinner="dots"):
-            # For npx commands, we might want to just check if the package can be resolved
-            if command == "npx" and args:
-                # Try to get help or version info
-                test_command = [command, "--yes"] + args + ["--help"]
-                result = subprocess.run(test_command, 
-                                      capture_output=True, text=True, 
-                                      timeout=30, env=env)
-                
-                if result.returncode == 0:
-                    console.print(f"[green]✓ MCP server '{server_name}' is working correctly[/green]")
-                    if verbose:
-                        console.print(f"[dim]Output: {result.stdout[:200]}...[/dim]")
-                    return True
+    else:
+        # Docker-based MCP server
+        command = server_config.get("command")
+        args = server_config.get("args", [])
+        
+        # Prepare environment
+        env = os.environ.copy()
+        env.update(env_vars)
+        
+        # Build command
+        full_command = [command] + args
+        
+        if verbose:
+            console.print(f"[blue]Type: Docker-based[/blue]")
+            console.print(f"[blue]Command: {' '.join(full_command)}[/blue]")
+            console.print(f"[blue]Environment variables: {list(env_vars.keys())}[/blue]")
+        
+        try:
+            with console.status(f"[bold green]Testing {server_name}...", spinner="dots"):
+                # For npx commands, we might want to just check if the package can be resolved
+                if command == "npx" and args:
+                    # Try to get help or version info
+                    test_command = [command, "--yes"] + args + ["--help"]
+                    result = subprocess.run(test_command, 
+                                          capture_output=True, text=True, 
+                                          timeout=30, env=env)
+                    
+                    if result.returncode == 0:
+                        console.print(f"[green]✓ MCP server '{server_name}' is working correctly[/green]")
+                        if verbose:
+                            console.print(f"[dim]Output: {result.stdout[:200]}...[/dim]")
+                        return True
+                    else:
+                        console.print(f"[red]✗ MCP server '{server_name}' failed to start[/red]")
+                        if verbose:
+                            console.print(f"[red]Error: {result.stderr}[/red]")
+                        return False
                 else:
-                    console.print(f"[red]✗ MCP server '{server_name}' failed to start[/red]")
-                    if verbose:
-                        console.print(f"[red]Error: {result.stderr}[/red]")
-                    return False
-            else:
-                # For other commands, try to run with --help
-                test_command = full_command + ["--help"]
-                result = subprocess.run(test_command, 
-                                      capture_output=True, text=True, 
-                                      timeout=10, env=env)
-                
-                if result.returncode == 0:
-                    console.print(f"[green]✓ MCP server '{server_name}' is available[/green]")
-                    return True
-                else:
-                    console.print(f"[yellow]? MCP server '{server_name}' status unclear[/yellow]")
-                    return True  # Don't fail for unclear status
-    
-    except subprocess.TimeoutExpired:
-        console.print(f"[yellow]⚠ MCP server '{server_name}' test timed out[/yellow]")
-        return False
-    except Exception as e:
-        console.print(f"[red]✗ Error testing MCP server '{server_name}': {e}[/red]")
-        return False
+                    # For other commands, try to run with --help
+                    test_command = full_command + ["--help"]
+                    result = subprocess.run(test_command, 
+                                          capture_output=True, text=True, 
+                                          timeout=10, env=env)
+                    
+                    if result.returncode == 0:
+                        console.print(f"[green]✓ MCP server '{server_name}' is available[/green]")
+                        return True
+                    else:
+                        console.print(f"[yellow]? MCP server '{server_name}' status unclear[/yellow]")
+                        return True  # Don't fail for unclear status
+        
+        except subprocess.TimeoutExpired:
+            console.print(f"[yellow]⚠ MCP server '{server_name}' test timed out[/yellow]")
+            return False
+        except Exception as e:
+            console.print(f"[red]✗ Error testing MCP server '{server_name}': {e}[/red]")
+            return False
 
 def show_popular_tools():
     """Show available popular MCP tools"""
@@ -391,43 +475,54 @@ def show_popular_tools():
     
     table = Table(title="Popular MCP Tools")
     table.add_column("Tool Name", style="cyan", no_wrap=True)
-    table.add_column("Image", style="green")
+    table.add_column("Type", style="blue", no_wrap=True)
+    table.add_column("Image/Endpoint", style="green")
     table.add_column("Version", style="magenta")
     table.add_column("Environment Variables", style="blue")
     table.add_column("Description", style="yellow")
     
     for tool_name, tool_info in popular_tools.items():
-        # Extract docker image and version
-        docker_image = "N/A"
-        version = "latest"
+        server_type = tool_info.get("type", "docker")  # Default to docker for backward compatibility
         
-        command = tool_info.get("command")
-        args = tool_info.get("args", [])
-        
-        if command == "docker" and args and "run" in args:
-            # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
-            for part in reversed(args):  # Start from the end as image is usually last
-                # Skip flags and options
-                if part.startswith("-") or "=" in part:
-                    continue
-                # Look for image patterns (contains / or :, doesn't start with -)
-                if ("/" in part or ":" in part) and not part.startswith("-"):
-                    docker_image = part
-                    if ":" in docker_image:
-                        image_parts = docker_image.split(":")
-                        docker_image = image_parts[0]
-                        version = image_parts[1]
-                    break
-                # Also check for simple image names without / or :
-                elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
-                    # This might be a simple image name like "mcp:latest"
-                    if ":" in part:
-                        image_parts = part.split(":")
-                        docker_image = image_parts[0]
-                        version = image_parts[1]
-                    else:
+        if server_type == "cloud":
+            # Cloud-hosted MCP server
+            image_or_endpoint = tool_info.get("endpoint", "N/A")
+            version = tool_info.get("version", "N/A")
+        else:
+            # Docker-based MCP server
+            # Extract docker image and version
+            docker_image = "N/A"
+            version = "latest"
+            
+            command = tool_info.get("command")
+            args = tool_info.get("args", [])
+            
+            if command == "docker" and args and "run" in args:
+                # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
+                for part in reversed(args):  # Start from the end as image is usually last
+                    # Skip flags and options
+                    if part.startswith("-") or "=" in part:
+                        continue
+                    # Look for image patterns (contains / or :, doesn't start with -)
+                    if ("/" in part or ":" in part) and not part.startswith("-"):
                         docker_image = part
-                    break
+                        if ":" in docker_image:
+                            image_parts = docker_image.split(":")
+                            docker_image = image_parts[0]
+                            version = image_parts[1]
+                        break
+                    # Also check for simple image names without / or :
+                    elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
+                        # This might be a simple image name like "mcp:latest"
+                        if ":" in part:
+                            image_parts = part.split(":")
+                            docker_image = image_parts[0]
+                            version = image_parts[1]
+                        else:
+                            docker_image = part
+                        break
+            
+            image_or_endpoint = docker_image
         
         # Format environment variables for display (show only required var names)
         env_vars = tool_info.get("env", {})
@@ -449,7 +544,8 @@ def show_popular_tools():
         
         table.add_row(
             tool_name,
-            docker_image,
+            server_type.title(),
+            image_or_endpoint,
             version,
             env_display,
             tool_info.get("description", "N/A")

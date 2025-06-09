@@ -254,22 +254,29 @@ def tool_list(ctx, verbose):
 
 @tool_group.command('add')
 @click.argument('server_name')
-@click.option('--command', '-c', help='Command to run the MCP server')
+@click.option('--command', '-c', help='Command to run the MCP server (for Docker-based servers)')
 @click.option('--args', '-a', multiple=True, help='Arguments for the command (can be used multiple times)')
 @click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format (can be used multiple times)')
+@click.option('--type', '-t', type=click.Choice(['docker', 'cloud']), default='docker', help='Server type: docker (default) or cloud')
+@click.option('--endpoint', help='Endpoint URL for cloud-hosted MCP servers')
+@click.option('--version', help='Version of the MCP server')
+@click.option('--description', help='Description of the MCP server')
 @click.option('--force', '-f', is_flag=True, help='Overwrite existing server configuration')
 @click.option('--popular', '-p', is_flag=True, help='Add from popular tools list')
 @click.pass_context
-def tool_add(ctx, server_name, command, args, env, force, popular):
+def tool_add(ctx, server_name, command, args, env, type, endpoint, version, description, force, popular):
     """Add a new MCP tool to the configuration
     
     Examples:
     
     Add a popular tool:
-    weave tool add filesystem --popular
+    weave tool add webcat --popular
     
-    Add a custom tool:
-    weave tool add my-server --command npx --args @my/mcp-server --env API_KEY=secret
+    Add a custom Docker-based tool:
+    weave tool add my-server --command docker --args run --args my-image:latest --env API_KEY=secret
+    
+    Add a cloud-hosted MCP server:
+    weave tool add jira-cloud --type cloud --endpoint https://mcp.atlassian.com --env ATLASSIAN_API_TOKEN=your-token
     
     Add filesystem tool with custom path:
     weave tool add my-files --command npx --args @modelcontextprotocol/server-filesystem --args /home/user/docs
@@ -298,22 +305,40 @@ def tool_add(ctx, server_name, command, args, env, force, popular):
                 console.print(f"[yellow]Tool '{server_name}' requires environment variables to be configured.[/yellow]")
                 console.print("[yellow]Please edit the configuration file after adding to set proper values.[/yellow]")
         
+        # Extract parameters from popular tool config
+        tool_type = tool_info.get("type", "docker")
+        tool_command = tool_info.get("command")
+        tool_args = tool_info.get("args", [])
+        tool_env = tool_info.get("env", {})
+        tool_endpoint = tool_info.get("endpoint")
+        tool_version = tool_info.get("version")
+        tool_description = tool_info.get("description")
+        
         success = add_tool(
             server_name,
-            tool_info["command"],
-            tool_info["args"],
-            tool_info["env"],
-            force
+            command=tool_command,
+            args=tool_args,
+            env=tool_env,
+            server_type=tool_type,
+            endpoint=tool_endpoint,
+            version=tool_version,
+            description=tool_description,
+            force=force
         )
         
         if success and verbose:
-            console.print(f"[blue]Added popular tool: {tool_info.get('description', 'N/A')}[/blue]")
+            console.print(f"[blue]Added popular tool: {tool_description or 'N/A'}[/blue]")
     
     else:
         # Add custom tool
-        if not command:
-            console.print("[red]--command is required when not using --popular[/red]")
-            return
+        if type == "cloud":
+            if not endpoint:
+                console.print("[red]--endpoint is required for cloud-hosted servers[/red]")
+                return
+        else:
+            if not command:
+                console.print("[red]--command is required for Docker-based servers[/red]")
+                return
         
         # Parse environment variables
         env_dict = {}
@@ -324,10 +349,23 @@ def tool_add(ctx, server_name, command, args, env, force, popular):
             key, value = env_var.split('=', 1)
             env_dict[key] = value
         
-        success = add_tool(server_name, command, list(args), env_dict, force)
+        success = add_tool(
+            server_name,
+            command=command,
+            args=list(args),
+            env=env_dict,
+            server_type=type,
+            endpoint=endpoint,
+            version=version,
+            description=description,
+            force=force
+        )
         
         if success and verbose:
-            console.print(f"[blue]Added custom MCP server with command: {command}[/blue]")
+            if type == "cloud":
+                console.print(f"[blue]Added cloud-hosted MCP server with endpoint: {endpoint}[/blue]")
+            else:
+                console.print(f"[blue]Added Docker-based MCP server with command: {command}[/blue]")
 
 @tool_group.command('remove')
 @click.argument('server_name')
