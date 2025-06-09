@@ -6,7 +6,7 @@ import click
 from rich.console import Console
 
 from .services import list_services, open_service, get_rag_logs
-from .config import get_project_name
+from .config import get_project_name, get_docker_service_name
 from .docker_commands import run_command
 
 console = Console()
@@ -199,10 +199,10 @@ def service_open(ctx, service_identifier):
     open_service(project_name, service_identifier, verbose)
 
 @service_group.command('up')
+@click.argument('services', nargs=-1)
 @click.option('--detach', '-d', is_flag=True, help='Run in detached mode')
-@click.option('--service', '-s', multiple=True, help='Specific service(s) to start')
 @click.pass_context
-def service_up(ctx, detach, service):
+def service_up(ctx, services, detach):
     """Start Docker Compose services"""
     project_name = get_project_name()
     verbose = ctx.obj.get('VERBOSE', False)
@@ -210,8 +210,15 @@ def service_up(ctx, detach, service):
     command = ['docker', 'compose', '-p', project_name, 'up']
     if detach:
         command.append('-d')
-    if service:
-        command.extend(service)
+    if services:
+        # Translate service names from config to Docker Compose names
+        docker_services = []
+        for service in services:
+            docker_service = get_docker_service_name(service, project_name)
+            docker_services.append(docker_service)
+            if verbose and docker_service != service:
+                console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+        command.extend(docker_services)
     
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
@@ -219,19 +226,28 @@ def service_up(ctx, detach, service):
     run_command(command, verbose)
 
 @service_group.command('down')
+@click.argument('service', required=False)
 @click.option('--volumes', '-v', is_flag=True, help='Remove volumes')
 @click.option('--remove-orphans', is_flag=True, help='Remove containers for services not in the compose file')
 @click.pass_context
-def service_down(ctx, volumes, remove_orphans):
+def service_down(ctx, service, volumes, remove_orphans):
     """Stop Docker Compose services"""
     project_name = get_project_name()
     verbose = ctx.obj.get('VERBOSE', False)
     
-    command = ['docker', 'compose', '-p', project_name, 'down']
-    if volumes:
-        command.append('-v')
-    if remove_orphans:
-        command.append('--remove-orphans')
+    if service:
+        # Stop specific service - translate service name
+        docker_service = get_docker_service_name(service, project_name)
+        if verbose and docker_service != service:
+            console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+        command = ['docker', 'compose', '-p', project_name, 'stop', docker_service]
+    else:
+        # Stop all services
+        command = ['docker', 'compose', '-p', project_name, 'down']
+        if volumes:
+            command.append('-v')
+        if remove_orphans:
+            command.append('--remove-orphans')
     
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
@@ -248,7 +264,11 @@ def service_restart(ctx, service):
     
     command = ['docker', 'compose', '-p', project_name, 'restart']
     if service:
-        command.append(service)
+        # Translate service name
+        docker_service = get_docker_service_name(service, project_name)
+        if verbose and docker_service != service:
+            console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+        command.append(docker_service)
     
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
