@@ -15,7 +15,7 @@ console = Console()
 @click.argument('service', required=False, metavar='[SERVICE]')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed logs without filtering')
 @click.pass_context
-def logs(ctx, follow, tail, service, verbose):
+def log(ctx, follow, tail, service, verbose):
     """View logs for services
     
     SERVICE can be any Docker Compose service name, or use the special service 'rag' 
