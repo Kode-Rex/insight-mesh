@@ -7,7 +7,7 @@ from rich.console import Console
 
 from .services import list_services, open_service, get_rag_logs
 from .config import get_project_name, get_docker_service_name
-from .docker_commands import run_command, run_service_up_with_feedback, run_service_restart_with_feedback
+from .docker_commands import run_command, run_service_up_with_feedback, run_service_restart_with_feedback, run_service_down_with_feedback
 
 console = Console()
 
@@ -225,21 +225,24 @@ def service_up(ctx, services):
     run_service_up_with_feedback(command, project_name, verbose)
 
 @service_group.command('down')
-@click.argument('service', required=False)
+@click.argument('services', nargs=-1)
 @click.option('--volumes', '-v', is_flag=True, help='Remove volumes')
 @click.option('--remove-orphans', is_flag=True, help='Remove containers for services not in the compose file')
 @click.pass_context
-def service_down(ctx, service, volumes, remove_orphans):
+def service_down(ctx, services, volumes, remove_orphans):
     """Stop Docker Compose services"""
     project_name = get_project_name()
     verbose = ctx.obj.get('VERBOSE', False)
     
-    if service:
-        # Stop specific service - translate service name
-        docker_service = get_docker_service_name(service, project_name)
-        if verbose and docker_service != service:
-            console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
-        command = ['docker', 'compose', '-p', project_name, 'stop', docker_service]
+    if services:
+        # Stop specific services - translate service names
+        docker_services = []
+        for service in services:
+            docker_service = get_docker_service_name(service, project_name)
+            docker_services.append(docker_service)
+            if verbose and docker_service != service:
+                console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+        command = ['docker', 'compose', '-p', project_name, 'stop'] + docker_services
     else:
         # Stop all services
         command = ['docker', 'compose', '-p', project_name, 'down']
@@ -251,7 +254,7 @@ def service_down(ctx, service, volumes, remove_orphans):
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
     
-    run_command(command, verbose)
+    run_service_down_with_feedback(command, project_name, verbose)
 
 @service_group.command('restart')
 @click.argument('services', nargs=-1)
