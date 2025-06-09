@@ -1,0 +1,38 @@
+{
+    "mcpServers": {
+      "webcat": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "tmfrisinger/webcat:latest"
+        ],
+        "env": {
+          "WEBCAT_URL": "http://localhost:8080"
+        }
+      },
+      "mcp-server": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "mcp:latest"
+        ],
+        "env": {}
+      },
+      "filesystem-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-v",
+          "/tmp:/workspace",
+          "fastmcp/filesystem:latest"
+        ],
+        "env": {}
+      }
+    }
+  }
