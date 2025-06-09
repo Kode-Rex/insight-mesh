@@ -9,7 +9,11 @@
           "tmfrisinger/webcat:latest"
         ],
         "env": {
-          "WEBCAT_URL": "http://localhost:8080"
+          "SERPER_API_KEY": "your-serper-api-key",
+          "WEBCAT_API_KEY": "your-webcat-api-key",
+          "PORT": "8000",
+          "RATE_LIMIT_WINDOW": "60",
+          "RATE_LIMIT_MAX_REQUESTS": "10"
         }
       },
       "mcp-server": {

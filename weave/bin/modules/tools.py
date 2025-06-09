@@ -131,7 +131,11 @@ def create_sample_config(config_path):
                 "command": "docker",
                 "args": ["run", "--rm", "-i", "tmfrisinger/webcat:latest"],
                 "env": {
-                    "WEBCAT_URL": "http://localhost:8080"
+                    "SERPER_API_KEY": "your-serper-api-key",
+                    "WEBCAT_API_KEY": "your-webcat-api-key",
+                    "PORT": "8000",
+                    "RATE_LIMIT_WINDOW": "60",
+                    "RATE_LIMIT_MAX_REQUESTS": "10"
                 }
             },
             "mcp-server": {
@@ -168,9 +172,10 @@ def list_tools(verbose=False):
         return
     
     table = Table(title="Available MCP Tools")
-    table.add_column("Server Name", style="cyan", no_wrap=True)
-    table.add_column("Command", style="green")
+    table.add_column("Tool Name", style="cyan", no_wrap=True)
+    table.add_column("Image", style="green")
     table.add_column("Status", style="yellow")
+    table.add_column("Version", style="magenta")
     table.add_column("Environment Variables", style="blue")
     
     for server_name, server_config in servers.items():
@@ -184,14 +189,62 @@ def list_tools(verbose=False):
         # Check if tool is available
         status = check_tool_availability(command, args)
         
-        # Format environment variables
-        env_display = ", ".join([f"{k}={'***' if 'key' in k.lower() or 'token' in k.lower() else v}" 
-                                for k, v in env_vars.items()]) if env_vars else "None"
+        # Format environment variables for display (show only required var names)
+        env_vars_display = []
+        if env_vars:
+            for key, value in env_vars.items():
+                # Mark as required if value is empty, starts with "your-", or contains placeholder text
+                is_required = (not value or 
+                             str(value).startswith("your-") or 
+                             "your-" in str(value).lower() or
+                             str(value) in ["", "placeholder", "required"])
+                
+                if is_required:
+                    env_vars_display.append(f"{key}*")
+                else:
+                    env_vars_display.append(key)
+        
+        env_display = ", ".join(env_vars_display) if env_vars_display else "None"
+        
+        # Extract docker image and version from command
+        docker_image = "N/A"
+        version = "latest"
+        
+        if command == "docker" and args:
+            # Build full command to parse
+            full_command_parts = [command] + args
+            full_command_str = " ".join(full_command_parts)
+            
+            if "run" in full_command_parts:
+                # Find the image name in the args (usually the last argument that contains a colon or looks like an image)
+                for part in reversed(args):  # Start from the end as image is usually last
+                    # Skip flags and options
+                    if part.startswith("-") or "=" in part:
+                        continue
+                    # Look for image patterns (contains / or :, doesn't start with -)
+                    if ("/" in part or ":" in part) and not part.startswith("-"):
+                        docker_image = part
+                        if ":" in docker_image:
+                            image_parts = docker_image.split(":")
+                            docker_image = image_parts[0]
+                            version = image_parts[1]
+                        break
+                    # Also check for simple image names without / or :
+                    elif part and not part.startswith("-") and part not in ["run", "--rm", "-i", "-v", "--network", "host"]:
+                        # This might be a simple image name like "mcp:latest"
+                        if ":" in part:
+                            image_parts = part.split(":")
+                            docker_image = image_parts[0]
+                            version = image_parts[1]
+                        else:
+                            docker_image = part
+                        break
         
         table.add_row(
             server_name,
-            full_command,
+            docker_image,
             status,
+            version,
             env_display
         )
     
@@ -369,7 +422,11 @@ def get_popular_tools():
             "command": "docker",
             "args": ["run", "--rm", "-i", "tmfrisinger/webcat:latest"],
             "env": {
-                "WEBCAT_URL": "http://localhost:8080"
+                "SERPER_API_KEY": "your-serper-api-key",
+                "WEBCAT_API_KEY": "your-webcat-api-key",
+                "PORT": "8000",
+                "RATE_LIMIT_WINDOW": "60",
+                "RATE_LIMIT_MAX_REQUESTS": "10"
             },
             "setup_args": [],
             "type": "docker-fastmcp"
