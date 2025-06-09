@@ -72,6 +72,8 @@ services:
   # PostgreSQL Database for OpenWebUI
   postgres_openwebui:
     image: postgres:14
+    ports:
+      - "5432:5432"  # OpenWebUI database
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -89,6 +91,8 @@ services:
   # PostgreSQL Database for LiteLLM
   postgres_litellm:
     image: postgres:14
+    ports:
+      - "5433:5432"  # LiteLLM database
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -106,6 +110,8 @@ services:
   # PostgreSQL Database for MCP
   postgres_mcp:
     image: postgres:14
+    ports:
+      - "5435:5432"  # MCP database
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
