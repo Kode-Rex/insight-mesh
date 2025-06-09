@@ -110,27 +110,22 @@ def get_service_for_container(container_name, image_name):
     config = get_config()
     services = config.get("services", {})
     
-    # Special case for postgres containers - match them exactly
-    if "postgres" in container_name:
-        for service_id, service_info in services.items():
-            if service_id.startswith("postgres-"):
-                container_patterns = service_info.get("container_patterns", [])
-                for pattern in container_patterns:
-                    if pattern in container_name:
-                        return service_id, service_info
+    # Sort services to prioritize more specific patterns (longer patterns first)
+    # This ensures database services with specific patterns like "postgres_openwebui-" 
+    # match before general services with patterns like "openwebui"
+    sorted_services = sorted(services.items(), key=lambda x: max(len(p) for p in x[1].get("container_patterns", [""])), reverse=True)
     
     # For each service, check if the container name or image matches any patterns
-    for service_id, service_info in services.items():
-        # Skip postgres services for non-postgres containers
-        if service_id.startswith("postgres-") and "postgres" not in container_name:
-            continue
-            
-        # Check container name patterns
+    for service_id, service_info in sorted_services:
+        # Check container name patterns first (more specific)
         container_patterns = service_info.get("container_patterns", [])
         for pattern in container_patterns:
             if pattern in container_name:
                 return service_id, service_info
-        
+    
+    # Only check image patterns if no container pattern matched
+    # This prevents all postgres containers from matching the first postgres service
+    for service_id, service_info in sorted_services:
         # Check image patterns
         image_patterns = service_info.get("images", [])
         for pattern in image_patterns:
@@ -157,7 +152,7 @@ def get_docker_service_name(service_identifier, project_name):
         The matching Docker service name or the original identifier if no match found
     """
     # Get list of docker-compose services
-    cmd = ['docker', 'compose', '-p', project_name, 'ps', '--services']
+    cmd = ['docker', 'compose', 'config', '--services']
     result = subprocess.run(cmd, capture_output=True, text=True)
     docker_services = result.stdout.strip().split('\n') if result.returncode == 0 else []
     
@@ -174,8 +169,13 @@ def get_docker_service_name(service_identifier, project_name):
         container_patterns = service_info.get("container_patterns", [])
         
         # Try to match container patterns to docker-compose services
-        for docker_svc in docker_services:
-            for pattern in container_patterns:
+        # First try exact matches, then partial matches
+        for pattern in container_patterns:
+            # Try exact match first
+            if pattern in docker_services:
+                return pattern
+            # Then try partial matches
+            for docker_svc in docker_services:
                 if pattern in docker_svc:
                     return docker_svc
     
@@ -185,8 +185,13 @@ def get_docker_service_name(service_identifier, project_name):
             container_patterns = info.get("container_patterns", [])
             
             # Try to match container patterns to docker-compose services
-            for docker_svc in docker_services:
-                for pattern in container_patterns:
+            # First try exact matches, then partial matches
+            for pattern in container_patterns:
+                # Try exact match first
+                if pattern in docker_services:
+                    return pattern
+                # Then try partial matches
+                for docker_svc in docker_services:
                     if pattern in docker_svc:
                         return docker_svc
     
