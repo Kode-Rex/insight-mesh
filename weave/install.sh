@@ -48,20 +48,10 @@ fi
 echo -e "${YELLOW}Activating virtual environment...${NC}"
 source venv/bin/activate
 
-# Install requirements
-echo -e "${YELLOW}Installing dependencies...${NC}"
+# Install requirements and package in development mode
+echo -e "${YELLOW}Installing dependencies and package...${NC}"
 pip install -r requirements.txt
-
-# Make the script executable
-echo -e "${YELLOW}Making script executable...${NC}"
-chmod +x bin/weave
-
-# Create symlink for easy access
-SYMLINK_PATH="$HOME/.local/bin/weave"
-mkdir -p "$HOME/.local/bin"
-
-echo -e "${YELLOW}Creating symlink to $SYMLINK_PATH...${NC}"
-ln -sf "$(pwd)/bin/weave" "$SYMLINK_PATH"
+pip install -e .
 
 # Update PATH if needed
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -79,17 +69,21 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     done
 fi
 
-# Create a wrapper script that activates the virtual environment
+# Create a global wrapper script that activates the virtual environment
+WEAVE_PROJECT_DIR="$(pwd)"
 WRAPPER_PATH="$HOME/.local/bin/weave"
+mkdir -p "$HOME/.local/bin"
+
+echo -e "${YELLOW}Creating global wrapper script at $WRAPPER_PATH...${NC}"
 cat > "$WRAPPER_PATH" <<EOL
 #!/bin/bash
-# Wrapper script for weave that activates the virtual environment
+# Global wrapper script for weave that activates the virtual environment
 
 # Activate the virtual environment
-source "$(pwd)/venv/bin/activate"
+source "$WEAVE_PROJECT_DIR/venv/bin/activate"
 
-# Run the actual weave command
-"$(pwd)/bin/weave" "\$@"
+# Run the weave command from the virtual environment
+"$WEAVE_PROJECT_DIR/venv/bin/weave" "\$@"
 EOL
 
 chmod +x "$WRAPPER_PATH"
