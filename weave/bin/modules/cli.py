@@ -15,7 +15,7 @@ from pathlib import Path
 from .config import get_project_name, get_docker_service_name, get_service_id_for_docker_service
 from .docker_commands import run_command
 from .services import list_services, open_service, get_rag_logs
-from .tools import list_tools, add_tool, remove_tool, install_tool, set_mcp_config_path, get_mcp_config_path, load_mcp_config, check_tool_availability, get_weave_config
+from .tools import list_tools, add_tool, remove_tool, install_tool, set_mcp_config_path, get_mcp_config_path, check_tool_availability, get_weave_config
 
 # Load environment variables
 load_dotenv()
@@ -264,109 +264,64 @@ def tool_list(ctx, verbose):
 @click.option('--version', help='Version of the MCP server')
 @click.option('--description', help='Description of the MCP server')
 @click.option('--force', '-f', is_flag=True, help='Overwrite existing server configuration')
-@click.option('--popular', '-p', is_flag=True, help='Add from popular tools list')
 @click.pass_context
-def tool_add(ctx, server_name, command, args, env, type, endpoint, version, description, force, popular):
+def tool_add(ctx, server_name, command, args, env, type, endpoint, version, description, force):
     """Add a new MCP tool to the configuration
+    
+    Add your own custom MCP servers to extend functionality.
     
     Examples:
     
-    Add a popular tool:
-    weave tool add webcat --popular
-    
-    Add a custom Docker-based tool:
+    Add a custom Docker-based MCP server:
     weave tool add my-server --command docker --args run --args my-image:latest --env API_KEY=secret
     
     Add a cloud-hosted MCP server:
     weave tool add jira-cloud --type cloud --endpoint https://mcp.atlassian.com --env ATLASSIAN_API_TOKEN=your-token
     
-    Add filesystem tool with custom path:
+    Add a filesystem tool with specific path:
     weave tool add my-files --command npx --args @modelcontextprotocol/server-filesystem --args /home/user/docs
+    
+    Add a Python-based MCP server:
+    weave tool add my-python-tool --command python --args -m --args my_mcp_package --env CONFIG_PATH=/path/to/config
     """
     verbose = ctx.obj.get('VERBOSE', False)
     
-    if popular:
-        # Add from popular tools in MCP configuration
-        config = load_mcp_config()
-        servers = config.get("mcpServers", {})
-        popular_tools = {name: server_config for name, server_config in servers.items() 
-                        if server_config.get("popular", False)}
-        
-        if server_name not in popular_tools:
-            console.print(f"[red]'{server_name}' is not a popular tool.[/red]")
-            console.print("[yellow]Use 'weave tool list' to see available tools.[/yellow]")
+    # Add custom tool
+    if type == "cloud":
+        if not endpoint:
+            console.print("[red]--endpoint is required for cloud-hosted servers[/red]")
             return
-        
-        tool_info = popular_tools[server_name]
-        
-        # Check if environment variables need to be set
-        if tool_info.get("env"):
-            needs_setup = any("your-" in str(v) for v in tool_info["env"].values())
-            if needs_setup:
-                console.print(f"[yellow]Tool '{server_name}' requires environment variables to be configured.[/yellow]")
-                console.print("[yellow]Please edit the configuration file after adding to set proper values.[/yellow]")
-        
-        # Extract parameters from popular tool config
-        tool_type = tool_info.get("type", "docker")
-        tool_command = tool_info.get("command")
-        tool_args = tool_info.get("args", [])
-        tool_env = tool_info.get("env", {})
-        tool_endpoint = tool_info.get("endpoint")
-        tool_version = tool_info.get("version")
-        tool_description = tool_info.get("description")
-        
-        success = add_tool(
-            server_name,
-            command=tool_command,
-            args=tool_args,
-            env=tool_env,
-            server_type=tool_type,
-            endpoint=tool_endpoint,
-            version=tool_version,
-            description=tool_description,
-            force=force
-        )
-        
-        if success and verbose:
-            console.print(f"[blue]Added popular tool: {tool_description or 'N/A'}[/blue]")
-    
     else:
-        # Add custom tool
+        if not command:
+            console.print("[red]--command is required for Docker-based servers[/red]")
+            return
+    
+    # Parse environment variables
+    env_dict = {}
+    for env_var in env:
+        if '=' not in env_var:
+            console.print(f"[red]Invalid environment variable format: {env_var}. Use KEY=VALUE[/red]")
+            return
+        key, value = env_var.split('=', 1)
+        env_dict[key] = value
+    
+    success = add_tool(
+        server_name,
+        command=command,
+        args=list(args),
+        env=env_dict,
+        server_type=type,
+        endpoint=endpoint,
+        version=version,
+        description=description,
+        force=force
+    )
+    
+    if success and verbose:
         if type == "cloud":
-            if not endpoint:
-                console.print("[red]--endpoint is required for cloud-hosted servers[/red]")
-                return
+            console.print(f"[blue]Added cloud-hosted MCP server with endpoint: {endpoint}[/blue]")
         else:
-            if not command:
-                console.print("[red]--command is required for Docker-based servers[/red]")
-                return
-        
-        # Parse environment variables
-        env_dict = {}
-        for env_var in env:
-            if '=' not in env_var:
-                console.print(f"[red]Invalid environment variable format: {env_var}. Use KEY=VALUE[/red]")
-                return
-            key, value = env_var.split('=', 1)
-            env_dict[key] = value
-        
-        success = add_tool(
-            server_name,
-            command=command,
-            args=list(args),
-            env=env_dict,
-            server_type=type,
-            endpoint=endpoint,
-            version=version,
-            description=description,
-            force=force
-        )
-        
-        if success and verbose:
-            if type == "cloud":
-                console.print(f"[blue]Added cloud-hosted MCP server with endpoint: {endpoint}[/blue]")
-            else:
-                console.print(f"[blue]Added Docker-based MCP server with command: {command}[/blue]")
+            console.print(f"[blue]Added Docker-based MCP server with command: {command}[/blue]")
 
 @tool_group.command('remove')
 @click.argument('server_name')
