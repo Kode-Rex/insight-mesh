@@ -256,45 +256,33 @@ def tool_list(ctx, verbose):
 
 @tool_group.command('add')
 @click.argument('server_name')
-@click.option('--command', '-c', help='Command to run the MCP server (for Docker-based servers)')
-@click.option('--args', '-a', multiple=True, help='Arguments for the command (can be used multiple times)')
-@click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format (can be used multiple times)')
-@click.option('--type', '-t', type=click.Choice(['docker', 'cloud']), default='docker', help='Server type: docker (default) or cloud')
-@click.option('--endpoint', help='Endpoint URL for cloud-hosted MCP servers')
-@click.option('--version', help='Version of the MCP server')
-@click.option('--description', help='Description of the MCP server')
+@click.argument('command_or_url')
+@click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
 @click.option('--force', '-f', is_flag=True, help='Overwrite existing server configuration')
 @click.pass_context
-def tool_add(ctx, server_name, command, args, env, type, endpoint, version, description, force):
+def tool_add(ctx, server_name, command_or_url, env, force):
     """Add a new MCP tool to the configuration
     
-    Add your own custom MCP servers to extend functionality.
+    COMMAND_OR_URL can be either:
+    - A Docker image (e.g., my-image:latest)
+    - A full command (e.g., "npx @modelcontextprotocol/server-filesystem /path")
+    - A URL for cloud-hosted servers (e.g., https://api.example.com/mcp)
     
     Examples:
     
-    Add a custom Docker-based MCP server:
-    weave tool add my-server --command docker --args run --args my-image:latest --env API_KEY=secret
+    Add a Docker image:
+    weave tool add my-server my-image:latest --env API_KEY=secret
     
-    Add a cloud-hosted MCP server:
-    weave tool add jira-cloud --type cloud --endpoint https://mcp.atlassian.com --env ATLASSIAN_API_TOKEN=your-token
+    Add a cloud-hosted server:
+    weave tool add jira-cloud https://mcp.atlassian.com --env ATLASSIAN_API_TOKEN=your-token
     
-    Add a filesystem tool with specific path:
-    weave tool add my-files --command npx --args @modelcontextprotocol/server-filesystem --args /home/user/docs
+    Add an NPX command:
+    weave tool add my-files "npx @modelcontextprotocol/server-filesystem /home/user/docs"
     
-    Add a Python-based MCP server:
-    weave tool add my-python-tool --command python --args -m --args my_mcp_package --env CONFIG_PATH=/path/to/config
+    Add a Python module:
+    weave tool add my-python-tool "python -m my_mcp_package" --env CONFIG_PATH=/path/to/config
     """
     verbose = ctx.obj.get('VERBOSE', False)
-    
-    # Add custom tool
-    if type == "cloud":
-        if not endpoint:
-            console.print("[red]--endpoint is required for cloud-hosted servers[/red]")
-            return
-    else:
-        if not command:
-            console.print("[red]--command is required for Docker-based servers[/red]")
-            return
     
     # Parse environment variables
     env_dict = {}
@@ -305,23 +293,53 @@ def tool_add(ctx, server_name, command, args, env, type, endpoint, version, desc
         key, value = env_var.split('=', 1)
         env_dict[key] = value
     
+    # Auto-detect type and parse command_or_url
+    if command_or_url.startswith(('http://', 'https://')):
+        # Cloud-hosted server
+        server_type = "cloud"
+        endpoint = command_or_url
+        command = None
+        args = []
+        description = f"Cloud-hosted MCP server at {endpoint}"
+    elif ' ' in command_or_url:
+        # Full command with arguments
+        server_type = "docker"
+        command_parts = command_or_url.split()
+        if command_parts[0] == "docker":
+            # Already a docker command
+            command = command_parts[0]
+            args = command_parts[1:]
+        else:
+            # Wrap in docker run
+            command = "docker"
+            args = ["run", "-d", "--rm", "--name", f"mcp-{server_name}"] + command_parts
+        endpoint = None
+        description = f"Docker-based MCP server: {command_or_url}"
+    else:
+        # Assume it's a Docker image
+        server_type = "docker"
+        command = "docker"
+        args = ["run", "-d", "--rm", "--name", f"mcp-{server_name}", command_or_url]
+        endpoint = None
+        description = f"Docker MCP server using image: {command_or_url}"
+    
     success = add_tool(
         server_name,
         command=command,
-        args=list(args),
+        args=args,
         env=env_dict,
-        server_type=type,
+        server_type=server_type,
         endpoint=endpoint,
-        version=version,
+        version="latest",
         description=description,
         force=force
     )
     
     if success and verbose:
-        if type == "cloud":
-            console.print(f"[blue]Added cloud-hosted MCP server with endpoint: {endpoint}[/blue]")
+        if server_type == "cloud":
+            console.print(f"[blue]Added cloud-hosted MCP server: {endpoint}[/blue]")
         else:
-            console.print(f"[blue]Added Docker-based MCP server with command: {command}[/blue]")
+            console.print(f"[blue]Added Docker MCP server: {command_or_url}[/blue]")
 
 @tool_group.command('remove')
 @click.argument('server_name')
