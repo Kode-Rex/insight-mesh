@@ -9,7 +9,7 @@ from .services import get_rag_logs
 
 console = Console()
 
-@click.command('logs')
+@click.command('log')
 @click.option('--follow', '-f', is_flag=True, help='Follow logs')
 @click.option('--tail', '-n', default=100, help='Number of lines to show')
 @click.argument('service', required=False, metavar='[SERVICE]')
