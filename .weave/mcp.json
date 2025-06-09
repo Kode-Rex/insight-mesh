@@ -20,86 +20,38 @@
         "popular": true,
         "description": "A simple web search service that falls back to duckduckgo if there is no key"
       },
-      "mcp-server": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-d",
-          "--rm",
-          "--name", "mcp-server",
-          "-p", "3000:3000",
-          "mcp:latest"
-        ],
-        "env": {},
-        "popular": true,
-        "description": "Project MCP server"
-      },
-      "filesystem-docker": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-d",
-          "--rm",
-          "--name", "mcp-filesystem",
-          "-v", "/tmp:/workspace",
-          "-p", "3001:3000",
-          "fastmcp/filesystem:latest"
-        ],
-        "env": {},
-        "popular": true,
-        "description": "Dockerized filesystem access"
-      },
-      "postgres-docker": {
+      "postgres-mcp": {
         "command": "docker",
         "args": [
           "run",
           "-d",
           "--rm",
           "--name", "mcp-postgres",
-          "--network", "host",
-          "fastmcp/postgres:latest"
+          "-p", "8001:8000",
+          "crystaldba/postgres-mcp:latest"
         ],
         "env": {
-          "PGHOST": "localhost",
-          "PGPORT": "5432",
-          "PGDATABASE": "your-db",
-          "PGUSER": "your-user",
-          "PGPASSWORD": "your-password"
+          "DATABASE_URI": "postgresql://username:password@host.docker.internal:5432/dbname"
         },
         "popular": true,
-        "description": "Dockerized PostgreSQL access"
+        "description": "Professional PostgreSQL MCP server with performance analysis and tuning"
       },
-      "github-docker": {
+      "browserbase": {
         "command": "docker",
         "args": [
           "run",
           "-d",
           "--rm",
-          "--name", "mcp-github",
-          "-p", "3002:3000",
-          "fastmcp/github:latest"
+          "--name", "mcp-browserbase",
+          "-p", "8002:8000",
+          "browserbase/mcp-server:latest"
         ],
         "env": {
-          "GITHUB_TOKEN": "your-github-token"
+          "BROWSERBASE_API_KEY": "your-browserbase-api-key",
+          "BROWSERBASE_PROJECT_ID": "your-project-id"
         },
         "popular": true,
-        "description": "Dockerized GitHub access"
-      },
-      "search-docker": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-d",
-          "--rm",
-          "--name", "mcp-search",
-          "-p", "3003:3000",
-          "fastmcp/search:latest"
-        ],
-        "env": {
-          "SEARCH_API_KEY": "your-search-api-key"
-        },
-        "popular": true,
-        "description": "Dockerized web search"
+        "description": "Cloud browser automation for web scraping and testing"
       }
     }
   }
