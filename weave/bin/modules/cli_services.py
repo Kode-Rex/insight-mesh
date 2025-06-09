@@ -7,7 +7,7 @@ from rich.console import Console
 
 from .services import list_services, open_service, get_rag_logs
 from .config import get_project_name, get_docker_service_name
-from .docker_commands import run_command
+from .docker_commands import run_command, run_service_up_with_feedback
 
 console = Console()
 
@@ -200,16 +200,14 @@ def service_open(ctx, service_identifier):
 
 @service_group.command('up')
 @click.argument('services', nargs=-1)
-@click.option('--detach', '-d', is_flag=True, help='Run in detached mode')
 @click.pass_context
-def service_up(ctx, services, detach):
+def service_up(ctx, services):
     """Start Docker Compose services"""
     project_name = get_project_name()
     verbose = ctx.obj.get('VERBOSE', False)
     
-    command = ['docker', 'compose', '-p', project_name, 'up']
-    if detach:
-        command.append('-d')
+    # Always run in detached mode and provide feedback
+    command = ['docker', 'compose', '-p', project_name, 'up', '-d']
     if services:
         # Translate service names from config to Docker Compose names
         docker_services = []
@@ -223,7 +221,8 @@ def service_up(ctx, services, detach):
     if verbose:
         console.print(f"[blue]Running: {' '.join(command)}[/blue]")
     
-    run_command(command, verbose)
+    # Run the command and provide feedback
+    run_service_up_with_feedback(command, project_name, verbose)
 
 @service_group.command('down')
 @click.argument('service', required=False)
