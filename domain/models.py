@@ -8,16 +8,16 @@ from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Bool
 from sqlalchemy.sql import func
 
 # Create base classes for different domains
-MCPBase = declarative_base()
+InsightMeshBase = declarative_base()
 SlackBase = declarative_base()
 
 # ============================================================================
-# MCP Domain Models
+# InsightMesh Domain Models
 # ============================================================================
 
-class MCPUser(MCPBase):
-    """MCP internal user model"""
-    __tablename__ = "mcp_users"
+class InsightMeshUser(InsightMeshBase):
+    """InsightMesh internal user model"""
+    __tablename__ = "insightmesh_users"
     
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, index=True)
@@ -28,31 +28,31 @@ class MCPUser(MCPBase):
     user_metadata = Column(JSON)
     openwebui_id = Column(String)  # Removed ForeignKey since users table doesn't exist in insightmesh
 
-class Context(MCPBase):
+class Context(InsightMeshBase):
     """Context storage for user sessions"""
     __tablename__ = "contexts"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("mcp_users.id"), index=True)
+    user_id = Column(String, ForeignKey("insightmesh_users.id"), index=True)
     content = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     expires_at = Column(DateTime(timezone=True))
     is_active = Column(Boolean)
     context_metadata = Column(JSON)
 
-class Conversation(MCPBase):
+class Conversation(InsightMeshBase):
     """Conversation tracking"""
     __tablename__ = "conversations"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("mcp_users.id"), index=True)
+    user_id = Column(String, ForeignKey("insightmesh_users.id"), index=True)
     title = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     is_active = Column(Boolean)
     conversation_metadata = Column(JSON)
 
-class Message(MCPBase):
+class Message(InsightMeshBase):
     """Message storage for conversations"""
     __tablename__ = "messages"
     

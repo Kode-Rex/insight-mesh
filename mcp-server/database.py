@@ -7,8 +7,8 @@ from datetime import datetime
 
 # Import domain models instead of defining our own
 from domain.models import (
-    MCPBase, SlackBase,
-    MCPUser, Context, Conversation, Message,
+    InsightMeshBase, SlackBase,
+    InsightMeshUser, Context, Conversation, Message,
     SlackUser, SlackChannel
 )
 
@@ -28,26 +28,26 @@ async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False
 slack_async_session = sessionmaker(slack_engine, class_=AsyncSession, expire_on_commit=False)
 
 # Database operations
-async def get_user_by_id(user_id: str) -> Optional[MCPUser]:
+async def get_user_by_id(user_id: str) -> Optional[InsightMeshUser]:
     """Get our user by ID"""
     async with async_session() as session:
         result = await session.execute(
-            select(MCPUser).where(MCPUser.id == user_id)
+            select(InsightMeshUser).where(InsightMeshUser.id == user_id)
         )
         return result.scalar_one_or_none()
 
-async def get_user_by_email(email: str) -> Optional[MCPUser]:
+async def get_user_by_email(email: str) -> Optional[InsightMeshUser]:
     """Get our user by email"""
     async with async_session() as session:
         result = await session.execute(
-            select(MCPUser).where(MCPUser.email == email)
+            select(InsightMeshUser).where(InsightMeshUser.email == email)
         )
         return result.scalar_one_or_none()
 
-async def create_user(user_id: str, email: str, name: Optional[str] = None, openwebui_id: Optional[str] = None) -> MCPUser:
+async def create_user(user_id: str, email: str, name: Optional[str] = None, openwebui_id: Optional[str] = None) -> InsightMeshUser:
     """Create a new user in our database"""
     async with async_session() as session:
-        user = MCPUser(
+        user = InsightMeshUser(
             id=user_id,
             email=email,
             name=name,
@@ -164,7 +164,7 @@ async def get_slack_user_by_email(email: str) -> Optional[SlackUser]:
 async def init_db():
     """Initialize database tables"""
     async with engine.begin() as conn:
-        await conn.run_sync(MCPBase.metadata.create_all)
+        await conn.run_sync(InsightMeshBase.metadata.create_all)
     
     # Note: SlackBase tables are managed by the Slack service/migrations
     # We only query them, not create them 
