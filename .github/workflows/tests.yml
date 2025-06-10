@@ -53,7 +53,8 @@ jobs:
       JWT_SECRET_KEY: test-secret-key
       ELASTICSEARCH_URL: http://localhost:9200
       REDIS_URL: redis://localhost:6379
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mcp_test
+      DB_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/mcp_test
+      SLACK_DB_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/slack_test
     
     steps:
     - uses: actions/checkout@v3

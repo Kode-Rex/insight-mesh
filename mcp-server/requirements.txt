@@ -18,3 +18,4 @@ fastmcp==2.7.0
 mcp>=1.9.3
 rich>=13.9.4
 httpx>=0.28.1
+faker>=20.0.0
