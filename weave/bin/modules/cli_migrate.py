@@ -106,7 +106,8 @@ def migrate_database(database_name, action='upgrade'):
     ]
     
     if action == 'upgrade':
-        cmd.append('head')
+        # Use branch-specific head for each database
+        cmd.append(f'{database_name}@head')
     
     return run_command(cmd, cwd=str(project_root), env=env)
 

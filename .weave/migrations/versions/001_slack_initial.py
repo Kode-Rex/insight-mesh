@@ -1,7 +1,7 @@
 """Initial Slack tables for slack database
 
-Revision ID: 002
-Revises: 001
+Revision ID: 001_slack
+Revises: 
 Create Date: 2024-01-20 12:00:00.000000
 
 """
@@ -10,9 +10,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '002'
-down_revision = '001'
-branch_labels = None
+revision = '001_slack'
+down_revision = None  # This is the base migration for slack database
+branch_labels = ('slack',)  # This migration belongs to the slack branch
 depends_on = None
 
 

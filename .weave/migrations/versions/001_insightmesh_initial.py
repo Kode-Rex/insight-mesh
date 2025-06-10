@@ -1,7 +1,7 @@
 """Initial MCP tables for insightmesh database
 
-Revision ID: 001
-Revises: 000
+Revision ID: 001_insightmesh
+Revises: 
 Create Date: 2024-01-20 12:00:00.000000
 
 """
@@ -10,9 +10,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '001'
-down_revision = '000'
-branch_labels = None
+revision = '001_insightmesh'
+down_revision = None  # This is the base migration for insightmesh database
+branch_labels = ('insightmesh',)  # This migration belongs to the insightmesh branch
 depends_on = None
 
 
