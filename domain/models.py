@@ -15,24 +15,6 @@ SlackBase = declarative_base()
 # MCP Domain Models
 # ============================================================================
 
-# Note: OpenWebUIUser model commented out as it's not part of the insightmesh database
-# This would be in a separate OpenWebUI database if needed
-# class OpenWebUIUser(MCPBase):
-#     """OpenWebUI User model (matches the OpenWebUI database schema)"""
-#     __tablename__ = "users"
-#     
-#     id = Column(String, primary_key=True)
-#     email = Column(String, unique=True, index=True)
-#     name = Column(String)
-#     created_at = Column(DateTime(timezone=True), server_default=func.now())
-#     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-#     is_active = Column(Boolean, default=True)
-#     is_superuser = Column(Boolean, default=False)
-#     is_verified = Column(Boolean, default=False)
-#     hashed_password = Column(String)
-#     oauth_accounts = Column(JSON, default=list)
-#     settings = Column(JSON, default=dict)
-
 class MCPUser(MCPBase):
     """MCP internal user model"""
     __tablename__ = "mcp_users"
