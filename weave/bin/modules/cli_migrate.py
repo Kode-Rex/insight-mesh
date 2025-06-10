@@ -7,6 +7,7 @@ import click
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+from .config import get_managed_databases, get_all_databases, get_database_choices
 
 console = Console()
 
@@ -62,7 +63,7 @@ def create_databases():
         cursor = conn.cursor()
         
         # List of databases to create
-        databases = ['openwebui', 'litellm', 'mcp', 'insight_mesh']
+        databases = get_all_databases()
         
         for db_name in databases:
             # Check if database exists
@@ -111,7 +112,7 @@ def migrate_database(database_name, action='upgrade'):
 
 def migrate_all(action='upgrade'):
     """Run migrations for all databases"""
-    databases = ['mcp', 'insight_mesh']
+    databases = get_managed_databases()
     
     for db in databases:
         console.print(f"\n{'='*50}")
@@ -191,7 +192,7 @@ def migrate_group(ctx):
         click.echo(ctx.get_help())
 
 @migrate_group.command('up')
-@click.option('--database', '-d', type=click.Choice(['mcp', 'insight_mesh', 'all']), 
+@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
               default='all', help='Database to migrate')
 @click.option('--skip-db-creation', is_flag=True, help='Skip database creation step')
 @click.pass_context
@@ -248,7 +249,7 @@ def migrate_up(ctx, database, skip_db_creation):
         sys.exit(1)
 
 @migrate_group.command('down')
-@click.option('--database', '-d', type=click.Choice(['mcp', 'insight_mesh']), 
+@click.option('--database', '-d', type=click.Choice(get_managed_databases()), 
               required=True, help='Database to rollback')
 @click.option('--revision', '-r', help='Target revision to rollback to')
 @click.pass_context
@@ -287,7 +288,7 @@ def migrate_down(ctx, database, revision):
         sys.exit(1)
 
 @migrate_group.command('create')
-@click.argument('database', type=click.Choice(['mcp', 'insight_mesh']))
+@click.argument('database', type=click.Choice(get_managed_databases()))
 @click.argument('message')
 @click.option('--autogenerate', '-a', is_flag=True, help='Auto-detect model changes')
 @click.pass_context
@@ -331,7 +332,7 @@ def migrate_create(ctx, database, message, autogenerate):
         sys.exit(1)
 
 @migrate_group.command('status')
-@click.option('--database', '-d', type=click.Choice(['mcp', 'insight_mesh', 'all']), 
+@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
               default='all', help='Database to check')
 @click.pass_context
 def migrate_status(ctx, database):
@@ -353,7 +354,7 @@ def migrate_status(ctx, database):
             table.add_column("Database", style="cyan", no_wrap=True)
             table.add_column("Current Revision", style="green")
             
-            for db in ['mcp', 'insight_mesh']:
+            for db in get_managed_databases():
                 try:
                     revision = show_current_revision(db).strip()
                     if not revision:
@@ -379,7 +380,7 @@ def migrate_status(ctx, database):
         sys.exit(1)
 
 @migrate_group.command('history')
-@click.argument('database', type=click.Choice(['mcp', 'insight_mesh']))
+@click.argument('database', type=click.Choice(get_managed_databases()))
 @click.pass_context
 def migrate_history(ctx, database):
     """Show migration history

@@ -1,9 +1,59 @@
+#!/usr/bin/env python
+
 import json
 import subprocess
+import os
 from pathlib import Path
 from rich.console import Console
+from typing import Dict, List, Optional
 
 console = Console()
+
+def get_project_root() -> Path:
+    """Get the project root directory"""
+    return Path.cwd()
+
+def get_config_path() -> Path:
+    """Get the path to the config.json file"""
+    return get_project_root() / '.weave' / 'config.json'
+
+def load_config() -> Dict:
+    """Load the configuration from config.json"""
+    config_path = get_config_path()
+    
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    
+    with open(config_path, 'r') as f:
+        return json.load(f)
+
+def get_databases_config() -> Dict:
+    """Get the databases configuration"""
+    config = load_config()
+    return config.get('databases', {})
+
+def get_managed_databases() -> List[str]:
+    """Get list of databases managed by weave (with migrations)"""
+    databases_config = get_databases_config()
+    return [
+        db_name for db_name, db_config in databases_config.items()
+        if db_config.get('managed_by') == 'weave' and db_config.get('migrations', False)
+    ]
+
+def get_all_databases() -> List[str]:
+    """Get list of all databases"""
+    databases_config = get_databases_config()
+    return list(databases_config.keys())
+
+def get_database_choices() -> List[str]:
+    """Get database choices for CLI commands (managed databases + 'all')"""
+    managed = get_managed_databases()
+    return managed + ['all']
+
+def get_database_description(db_name: str) -> Optional[str]:
+    """Get description for a database"""
+    databases_config = get_databases_config()
+    return databases_config.get(db_name, {}).get('description')
 
 def get_config():
     """

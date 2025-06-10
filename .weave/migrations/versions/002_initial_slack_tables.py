@@ -1,4 +1,4 @@
-"""Initial Slack tables
+"""Initial Slack tables for slack database
 
 Revision ID: 002
 Revises: 001

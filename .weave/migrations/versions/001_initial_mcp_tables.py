@@ -1,4 +1,4 @@
-"""Initial MCP tables
+"""Initial MCP tables for insightmesh database
 
 Revision ID: 001
 Revises: 000

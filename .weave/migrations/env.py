@@ -10,6 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 # Import all models for autogenerate support
 from domain.models import MCPBase, SlackBase
 
+# Import config utilities
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'weave', 'bin', 'modules'))
+from config import get_databases_config
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -19,13 +23,36 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Define target metadata for each database
-databases = {
-    'openwebui': None,  # OpenWebUI manages its own schema
-    'litellm': None,    # LiteLLM manages its own schema
-    'mcp': MCPBase.metadata,
-    'insight_mesh': SlackBase.metadata,
-}
+# Define target metadata for each database based on config
+def get_databases():
+    """Get database configuration from config.json"""
+    try:
+        databases_config = get_databases_config()
+        databases = {}
+        
+        for db_name, db_config in databases_config.items():
+            if not db_config.get('migrations', False):
+                databases[db_name] = None
+            else:
+                metadata_name = db_config.get('metadata')
+                if metadata_name == 'SlackBase':
+                    databases[db_name] = SlackBase.metadata
+                elif metadata_name == 'MCPBase':
+                    databases[db_name] = MCPBase.metadata
+                else:
+                    databases[db_name] = None
+        
+        return databases
+    except Exception as e:
+        # Fallback to hardcoded config if config.json is not available
+        return {
+            'openwebui': None,  # OpenWebUI manages its own schema
+            'litellm': None,    # LiteLLM manages its own schema
+            'slack': SlackBase.metadata,  # Slack tables go to slack database
+            'insightmesh': MCPBase.metadata,  # MCP tables go to insightmesh database
+        }
+
+databases = get_databases()
 
 def get_database_url(database_name: str) -> str:
     """Get database URL from environment variables"""

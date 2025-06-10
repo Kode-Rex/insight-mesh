@@ -145,5 +145,19 @@
             "type": "search",
             "migration_tool": "index_settings"
         }
+    },
+    "databases": {
+        "slack": {
+            "description": "Slack integration data (users, channels, messages)",
+            "managed_by": "weave",
+            "migrations": true,
+            "metadata": "SlackBase"
+        },
+        "insightmesh": {
+            "description": "Core MCP server data (users, contexts, conversations)",
+            "managed_by": "weave", 
+            "migrations": true,
+            "metadata": "MCPBase"
+        }
     }
 }
