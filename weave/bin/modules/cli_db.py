@@ -10,15 +10,16 @@ from .config import get_managed_databases, get_database_choices
 
 console = Console()
 
-@click.group('db')
-def db_group():
+@click.group('db', invoke_without_command=True)
+@click.pass_context
+def db_group(ctx):
     """Database management commands"""
-    pass
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
 # Wrap the migration commands with more intuitive names
 @db_group.command('migrate')
-@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
-              default='all', help='Database to migrate')
+@click.argument('database', type=click.Choice(get_database_choices()), required=False)
 @click.option('--skip-db-creation', is_flag=True, help='Skip database creation step')
 @click.option('--dry-run', is_flag=True, help='Show what would be executed without running it')
 @click.pass_context
@@ -33,16 +34,22 @@ def db_migrate(ctx, database, skip_db_creation, dry_run):
     
     Migrate all databases:
     weave db migrate
+    weave db migrate all
     
     Migrate specific database:
-    weave db migrate --database slack
+    weave db migrate slack
+    weave db migrate insightmesh
     
     Preview what would be migrated:
     weave db migrate --dry-run
+    weave db migrate slack --dry-run
     
     Skip database creation (if databases already exist):
     weave db migrate --skip-db-creation
     """
+    # Default to 'all' if no database specified
+    if database is None:
+        database = 'all'
     if dry_run:
         console.print("[bold blue]🔍 DRY RUN - Showing what would be executed:[/bold blue]")
         console.print()
@@ -70,8 +77,7 @@ def db_migrate(ctx, database, skip_db_creation, dry_run):
     ctx.invoke(migrate_up, database=database, skip_db_creation=skip_db_creation)
 
 @db_group.command('rollback')
-@click.option('--database', '-d', type=click.Choice(get_managed_databases()), 
-              required=True, help='Database to rollback')
+@click.argument('database', type=click.Choice(get_managed_databases()))
 @click.option('--revision', '-r', help='Target revision to rollback to')
 @click.option('--dry-run', is_flag=True, help='Show what would be rolled back without doing it')
 @click.pass_context
@@ -81,13 +87,13 @@ def db_rollback(ctx, database, revision, dry_run):
     Examples:
     
     Rollback one migration:
-    weave db rollback --database slack
+    weave db rollback slack
     
     Rollback to specific revision:
-    weave db rollback --database slack --revision 001
+    weave db rollback slack --revision 001
     
     Preview what would be rolled back:
-    weave db rollback --database slack --dry-run
+    weave db rollback slack --dry-run
     """
     if dry_run:
         console.print("[bold blue]🔍 DRY RUN - Showing what would be rolled back:[/bold blue]")
@@ -180,8 +186,7 @@ def db_create_migration(ctx, database, message, auto, dry_run):
         console.print(f"[green]✅ Migration created successfully[/green]")
 
 @db_group.command('status')
-@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
-              default='all', help='Database to check')
+@click.argument('database', type=click.Choice(get_database_choices()), required=False)
 @click.pass_context
 def db_status(ctx, database):
     """Show current migration status
@@ -190,10 +195,15 @@ def db_status(ctx, database):
     
     Check all databases:
     weave db status
+    weave db status all
     
     Check specific database:
-    weave db status --database slack
+    weave db status slack
+    weave db status insightmesh
     """
+    # Default to 'all' if no database specified
+    if database is None:
+        database = 'all'
     # Call the underlying migrate_status function
     ctx.invoke(migrate_status, database=database)
 
