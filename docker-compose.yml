@@ -289,9 +289,12 @@ services:
     ports:
       - "9090:9091"  # Map port 9090 to 9091 (FastMCP server port)
     depends_on:
-      - postgres_mcp
-      - elasticsearch
-      - redis
+      postgres_mcp:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   slack-bot:
