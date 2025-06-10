@@ -41,11 +41,16 @@ def log(ctx, follow, tail, service, verbose):
         return
     
     project_name = get_project_name()
+    # Add fallback for when project_name is falsy or False
+    if not project_name or project_name == "False":
+        console.print("[yellow]Warning: Project name not found, using default 'insight-mesh'[/yellow]")
+        project_name = "insight-mesh"
+    
     ctx_verbose = ctx.obj.get('VERBOSE', False)
     
     # Special case for RAG logs
     if service == "rag":
-        get_rag_logs(follow, tail, verbose or ctx_verbose)
+        get_rag_logs(project_name, follow, tail, verbose or ctx_verbose)
         return
     
     command = ['docker', 'compose', '-p', project_name, 'logs']
