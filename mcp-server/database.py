@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 # Import domain models instead of defining our own
-from domain.models import (
+from domain import (
     InsightMeshBase, SlackBase,
     InsightMeshUser, Context, Conversation, Message,
     SlackUser, SlackChannel
