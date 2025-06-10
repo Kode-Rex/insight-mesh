@@ -165,14 +165,19 @@ def db_create_migration(ctx, database, message, auto, dry_run):
         # Use alembic's autogenerate feature
         from .cli_migrate import create_migration_autogenerate
         try:
-            ctx.invoke(create_migration_autogenerate, database, message)
-        except AttributeError:
-            # Fallback to regular creation if autogenerate function doesn't exist
-            console.print("[yellow]⚠️  Auto-detection not available, creating empty migration...[/yellow]")
-            ctx.invoke(migrate_create, database, message)
+            result = create_migration_autogenerate(database, message)
+            console.print(f"[green]✅ Auto-generated migration created successfully[/green]")
+        except Exception as e:
+            # Fallback to regular creation if autogenerate function doesn't work
+            console.print(f"[yellow]⚠️  Auto-detection failed ({e}), creating empty migration...[/yellow]")
+            from .cli_migrate import create_migration
+            result = create_migration(database, message)
+            console.print(f"[green]✅ Empty migration created successfully[/green]")
     else:
-        # Call the underlying migrate_create function
-        ctx.invoke(migrate_create, database, message)
+        # Call the underlying create_migration function directly
+        from .cli_migrate import create_migration
+        result = create_migration(database, message)
+        console.print(f"[green]✅ Migration created successfully[/green]")
 
 @db_group.command('status')
 @click.option('--database', '-d', type=click.Choice(get_database_choices()), 

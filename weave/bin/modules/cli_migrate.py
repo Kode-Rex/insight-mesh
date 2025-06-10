@@ -133,7 +133,7 @@ def create_migration(database_name, message):
         '-c', str(migrations_dir / 'alembic.ini'),
         '-x', f'database={database_name}',
         'revision',
-        '--branch-label', database_name,
+        '--head', f'{database_name}@head',
         '-m', f'{database_name}_{message}'
     ]
     
@@ -151,7 +151,7 @@ def create_migration_autogenerate(database_name, message):
         '-x', f'database={database_name}',
         'revision',
         '--autogenerate',
-        '--branch-label', database_name,
+        '--head', f'{database_name}@head',
         '-m', f'{database_name}_{message}'
     ]
     
