@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
     
-    model_config = ConfigDict(env_file=".env")
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
 # Create a singleton instance
 settings = Settings() 

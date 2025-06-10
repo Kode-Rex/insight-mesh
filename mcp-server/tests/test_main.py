@@ -8,6 +8,8 @@ import asyncio
 # Patch environment variables for testing
 os.environ["MCP_API_KEY"] = "test_api_key"
 os.environ["JWT_SECRET_KEY"] = "test_secret_key"
+os.environ["DB_URL"] = "postgresql+asyncpg://test:test@localhost:5432/test_db"
+os.environ["SLACK_DB_URL"] = "postgresql+asyncpg://test:test@localhost:5432/test_slack_db"
 
 # Import after environment variables are set
 from main import mcp, _process_context_request, health_check_direct
@@ -114,9 +116,13 @@ class TestMCP:
     async def test_process_context_with_slack_token(self, test_context_result):
         """Test processing context with a Slack token."""
         # Create a mock context service that returns our test result
-        with patch("main.context_service.get_context_for_prompt", new_callable=AsyncMock) as mock_get_context:
+        with patch("main.context_service.get_context_for_prompt", new_callable=AsyncMock) as mock_get_context, \
+             patch("main.get_slack_user_by_id", new_callable=AsyncMock) as mock_get_slack_user:
             # Set up the get_context_for_prompt method
             mock_get_context.return_value = test_context_result
+            
+            # Mock the Slack user lookup to return None (user not found)
+            mock_get_slack_user.return_value = None
             
             # Create a sample Slack token
             token = "slack:U123456"

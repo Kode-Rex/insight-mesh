@@ -369,24 +369,55 @@ def show_service_urls(project_name, services):
         pass  # Silently fail for URL display
         
 def extract_urls(ports_string):
-    """Extract URLs from Docker port mappings"""
+    """Extract URLs from Docker port mappings with correct protocols"""
     urls = []
     if not ports_string:
         return urls
+    
+    # Protocol mapping based on common port conventions
+    protocol_map = {
+        # PostgreSQL
+        5432: 'postgresql',
+        5433: 'postgresql',
+        5434: 'postgresql', 
+        5435: 'postgresql',
+        # Neo4j
+        7687: 'bolt',      # Neo4j Bolt protocol
+        7474: 'http',      # Neo4j Browser
+        # Redis
+        6379: 'redis',
+        # Standard HTTP/HTTPS
+        80: 'http',
+        443: 'https',
+        8080: 'http',
+        8443: 'https',
+        # Common web service ports
+        3000: 'http',
+        3001: 'http', 
+        4000: 'http',
+        8000: 'http',
+        8765: 'http',
+        9090: 'http',
+        9200: 'http',      # Elasticsearch
+    }
     
     for port_mapping in ports_string.split(','):
         if '->' in port_mapping and 'tcp' in port_mapping:
             try:
                 host_part = port_mapping.split('->')[0].strip()
                 if ':' in host_part:
-                    host, port = host_part.split(':')
+                    host, port_str = host_part.split(':')
                     # Replace 0.0.0.0 with localhost
                     if host == '0.0.0.0':
                         host = 'localhost'
-                    urls.append(f"http://{host}:{port}")
                 else:
-                    port = host_part
-                    urls.append(f"http://localhost:{port}")
+                    host = 'localhost'
+                    port_str = host_part
+                
+                port = int(port_str)
+                protocol = protocol_map.get(port, 'http')  # Default to http
+                
+                urls.append(f"{protocol}://{host}:{port}")
             except Exception:
                 pass
     return urls 

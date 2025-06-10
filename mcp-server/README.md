@@ -244,7 +244,8 @@ Cache TTL is configurable via the `CACHE_TTL` environment variable (default: 1 h
 
 1. Install development dependencies:
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -r requirements.txt
+   pip install pytest pytest-asyncio pytest-cov flake8 black
    ```
 
 2. Run tests:
@@ -301,7 +302,8 @@ The tests aim to cover:
 
 2. Install development dependencies:
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -r requirements.txt
+   pip install pytest pytest-asyncio pytest-cov
    ```
 
 ### Running Tests

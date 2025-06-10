@@ -1,113 +1,59 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Boolean, Table, MetaData
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import func, select
 from typing import Optional, List
 import os
 from datetime import datetime
 
-# Create base class for models
-Base = declarative_base()
+# Import domain models instead of defining our own
+from domain import (
+    InsightMeshBase, SlackBase,
+    InsightMeshUser, Context, Conversation, Message,
+    SlackUser, SlackChannel
+)
 
 # Database connection
-DB_URL = os.getenv("DB_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/openwebui")
+DB_URL = os.getenv("DB_URL")
+if not DB_URL:
+    raise ValueError("DB_URL environment variable is required")
+
+# For Slack user lookups, connect to the insight_mesh database on the same server
+SLACK_DB_URL = os.getenv("SLACK_DB_URL")
+if not SLACK_DB_URL:
+    raise ValueError("SLACK_DB_URL environment variable is required")
+
 engine = create_async_engine(DB_URL, echo=True)
+slack_engine = create_async_engine(SLACK_DB_URL, echo=True)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-# OpenWebUI User model (matches the OpenWebUI database schema)
-class OpenWebUIUser(Base):
-    __tablename__ = "users"
-    
-    id = Column(String, primary_key=True)
-    email = Column(String, unique=True, index=True)
-    name = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    is_verified = Column(Boolean, default=False)
-    hashed_password = Column(String)
-    oauth_accounts = Column(JSON, default=list)
-    settings = Column(JSON, default=dict)
-
-# Our internal models
-class User(Base):
-    __tablename__ = "mcp_users"
-    
-    id = Column(String, primary_key=True)
-    email = Column(String, unique=True, index=True)
-    name = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    metadata = Column(JSON, default=dict)
-    openwebui_id = Column(String, ForeignKey("users.id"))  # Reference to OpenWebUI user
-
-class Context(Base):
-    __tablename__ = "contexts"
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"))
-    content = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    expires_at = Column(DateTime(timezone=True))
-    is_active = Column(Boolean, default=True)
-    metadata = Column(JSON, default=dict)
-
-class Conversation(Base):
-    __tablename__ = "conversations"
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"))
-    title = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    metadata = Column(JSON, default=dict)
-
-class Message(Base):
-    __tablename__ = "messages"
-    
-    id = Column(Integer, primary_key=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"))
-    role = Column(String)  # user, assistant, system
-    content = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    metadata = Column(JSON, default=dict)
+slack_async_session = sessionmaker(slack_engine, class_=AsyncSession, expire_on_commit=False)
 
 # Database operations
-async def get_openwebui_user_by_email(email: str) -> Optional[OpenWebUIUser]:
-    """Get OpenWebUI user by email"""
-    async with async_session() as session:
-        result = await session.execute(
-            select(OpenWebUIUser).where(OpenWebUIUser.email == email)
-        )
-        return result.scalar_one_or_none()
-
-async def get_user_by_id(user_id: str) -> Optional[User]:
+async def get_user_by_id(user_id: str) -> Optional[InsightMeshUser]:
     """Get our user by ID"""
     async with async_session() as session:
         result = await session.execute(
-            select(User).where(User.id == user_id)
+            select(InsightMeshUser).where(InsightMeshUser.id == user_id)
         )
         return result.scalar_one_or_none()
 
-async def get_user_by_email(email: str) -> Optional[User]:
+async def get_user_by_email(email: str) -> Optional[InsightMeshUser]:
     """Get our user by email"""
     async with async_session() as session:
         result = await session.execute(
-            select(User).where(User.email == email)
+            select(InsightMeshUser).where(InsightMeshUser.email == email)
         )
         return result.scalar_one_or_none()
 
-async def create_user(user_id: str, email: str, name: Optional[str] = None, openwebui_id: Optional[str] = None) -> User:
+async def create_user(user_id: str, email: str, name: Optional[str] = None, openwebui_id: Optional[str] = None) -> InsightMeshUser:
     """Create a new user in our database"""
     async with async_session() as session:
-        user = User(
+        user = InsightMeshUser(
             id=user_id,
             email=email,
             name=name,
-            openwebui_id=openwebui_id
+            openwebui_id=openwebui_id,
+            is_active=True,
+            user_metadata={}
         )
         session.add(user)
         await session.commit()
@@ -140,7 +86,8 @@ async def create_context(
             user_id=user_id,
             content=content,
             expires_at=expires_at,
-            metadata=metadata or {}
+            is_active=True,
+            context_metadata=metadata or {}
         )
         session.add(context)
         await session.commit()
@@ -171,7 +118,8 @@ async def create_conversation(
         conversation = Conversation(
             user_id=user_id,
             title=title,
-            metadata=metadata or {}
+            is_active=True,
+            conversation_metadata=metadata or {}
         )
         session.add(conversation)
         await session.commit()
@@ -190,19 +138,33 @@ async def add_message(
             conversation_id=conversation_id,
             role=role,
             content=content,
-            metadata=metadata or {}
+            message_metadata=metadata or {}
         )
         session.add(message)
         await session.commit()
         await session.refresh(message)
         return message
 
-# Initialize database
+async def get_slack_user_by_id(slack_user_id: str) -> Optional[SlackUser]:
+    """Get Slack user by ID from insight_mesh database"""
+    async with slack_async_session() as session:
+        result = await session.execute(
+            select(SlackUser).where(SlackUser.id == slack_user_id)
+        )
+        return result.scalar_one_or_none()
+
+async def get_slack_user_by_email(email: str) -> Optional[SlackUser]:
+    """Get Slack user by email from insight_mesh database"""
+    async with slack_async_session() as session:
+        result = await session.execute(
+            select(SlackUser).where(SlackUser.email == email)
+        )
+        return result.scalar_one_or_none()
+
 async def init_db():
-    """Initialize the database with tables"""
+    """Initialize database tables"""
     async with engine.begin() as conn:
-        # Only create our tables, not the OpenWebUI tables
-        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(
-            sync_conn,
-            tables=[User.__table__, Context.__table__, Conversation.__table__, Message.__table__]
-        )) 
+        await conn.run_sync(InsightMeshBase.metadata.create_all)
+    
+    # Note: SlackBase tables are managed by the Slack service/migrations
+    # We only query them, not create them 

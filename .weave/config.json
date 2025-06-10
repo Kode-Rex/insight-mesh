@@ -1,6 +1,6 @@
 {
     "project_name": "insight-mesh",
-    "description": "Delivering AI solutions directly into enterprise workflows\u2014no extra tabs required.",
+    "description": "Delivering AI solutions directly into enterprise workflows—no extra tabs required.",
     "mcp": {
         "config_path": ".weave/mcp.json",
         "description": "MCP Servers you can install as tools",
@@ -36,7 +36,7 @@
             "container_patterns": [
                 "openwebui"
             ],
-            "depends_on": ["openwebui-db"]
+            "depends_on": ["postgres"]
         },
         "litellm": {
             "display_name": "LiteLLM",
@@ -47,7 +47,7 @@
             "container_patterns": [
                 "litellm"
             ],
-            "depends_on": ["litellm-db"]
+            "depends_on": ["postgres"]
         },
         "slack-bot": {
             "display_name": "Slack Bot",
@@ -68,7 +68,7 @@
             "container_patterns": [
                 "dagster"
             ],
-            "depends_on": ["dagster-db"]
+            "depends_on": ["postgres", "redis", "elasticsearch", "neo4j"]
         },
         "mcp": {
             "display_name": "MCP Server",
@@ -79,46 +79,16 @@
             "container_patterns": [
                 "mcp"
             ],
-            "depends_on": ["mcp-db"]
+            "depends_on": ["postgres", "elasticsearch", "neo4j"]
         },
-        "dagster-db": {
-            "display_name": "Dagster DB",
-            "description": "Dagster database",
+        "postgres": {
+            "display_name": "PostgreSQL",
+            "description": "Consolidated PostgreSQL database server",
             "images": [
                 "postgres:14"
             ],
             "container_patterns": [
-                "postgres_dagster-"
-            ]
-        },
-        "mcp-db": {
-            "display_name": "MCP DB",
-            "description": "MCP database",
-            "images": [
-                "postgres:14"
-            ],
-            "container_patterns": [
-                "postgres_mcp-"
-            ]
-        },
-        "openwebui-db": {
-            "display_name": "OpenWebUI DB",
-            "description": "OpenWebUI database",
-            "images": [
-                "postgres:14"
-            ],
-            "container_patterns": [
-                "postgres_openwebui-"
-            ]
-        },
-        "litellm-db": {
-            "display_name": "LiteLLM DB",
-            "description": "LiteLLM database",
-            "images": [
-                "postgres:14"
-            ],
-            "container_patterns": [
-                "postgres_litellm-"
+                "postgres"
             ]
         },
         "redis": {
@@ -174,6 +144,20 @@
         "elasticsearch": {
             "type": "search",
             "migration_tool": "index_settings"
+        }
+    },
+    "databases": {
+        "slack": {
+            "description": "Slack integration data (users, channels, messages)",
+            "managed_by": "weave",
+            "migrations": true,
+            "metadata": "SlackBase"
+        },
+        "insightmesh": {
+            "description": "Core MCP server data (users, contexts, conversations)",
+            "managed_by": "weave", 
+            "migrations": true,
+            "metadata": "MCPBase"
         }
     }
 }
