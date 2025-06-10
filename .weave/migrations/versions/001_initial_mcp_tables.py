@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '001'
-down_revision = None
+down_revision = '000'
 branch_labels = None
 depends_on = None
 
@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
+        sa.Column('user_metadata', sa.JSON(), nullable=True),
         sa.Column('openwebui_id', sa.String(), nullable=True),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('email')
@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
+        sa.Column('context_metadata', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['mcp_users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
+        sa.Column('conversation_metadata', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['mcp_users.id'], ),
         sa.PrimaryKeyConstraint('id')
     )
@@ -64,7 +64,7 @@ def upgrade() -> None:
         sa.Column('role', sa.String(), nullable=True),
         sa.Column('content', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
+        sa.Column('message_metadata', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ),
         sa.PrimaryKeyConstraint('id')
     )

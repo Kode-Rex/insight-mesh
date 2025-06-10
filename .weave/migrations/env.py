@@ -8,8 +8,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 # Import all models for autogenerate support
-from mcp_server.database import Base as MCPBase
-from dagster_project.slack.models import Base as SlackBase
+from domain.models import MCPBase, SlackBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
