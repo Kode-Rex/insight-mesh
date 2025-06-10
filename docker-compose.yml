@@ -3,13 +3,13 @@ services:
   openwebui:
     image: tmfrisinger/open-webui:1.0.1
     ports:
-      - "3000:3000"
+      - "3000:8080"
     environment:
       - HOST=0.0.0.0
       - PORT=3000
       - WEBUI_AUTH_ENABLED=true
       - WEBUI_DB_BACKEND=postgres
-      - POSTGRES_HOST=postgres_openwebui
+      - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -19,7 +19,7 @@ services:
       - OPENAI_API_BASE_URL=http://caddy:80/v1
       - OPENAI_API_MODELS=${OPENAI_API_MODELS}
       - ENABLE_SIGNUP=true
-      - ENABLE_OAUTH_SIGNUP=true
+      - ENABLE_OAUTH_SIGNUP=${ENABLE_OAUTH_SIGNUP}
       - ENABLE_LOGIN_FORM=false
       - WEBUI_ALLOW_PASSWORD_RESET=true
       - WEBUI_REGISTRATION_ENABLED=true
@@ -29,57 +29,57 @@ services:
       - GOOGLE_AUTH_ENABLED=true
       - ALLOWED_EMAIL_DOMAIN=${ALLOWED_EMAIL_DOMAIN}
       - GOOGLE_AUTO_REGISTER=true
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/openwebui
+      - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=${OAUTH_MERGE_ACCOUNTS_BY_EMAIL}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - WEBUI_AUTH=${WEBUI_AUTH}
+      - DEFAULT_USER_ROLE=${DEFAULT_USER_ROLE}
+      - USER_PERMISSIONS_CHAT_DELETION=${USER_PERMISSIONS_CHAT_DELETION}
+      - USER_PERMISSIONS_CHAT_EDITING=${USER_PERMISSIONS_CHAT_EDITING}
+      - USER_PERMISSIONS_CHAT_TEMPORARY=${USER_PERMISSIONS_CHAT_TEMPORARY}
+      - ENABLE_COMMUNITY_SHARING=${ENABLE_COMMUNITY_SHARING}
+      - ENABLE_MESSAGE_RATING=${ENABLE_MESSAGE_RATING}
+      - ENABLE_EVALUATION_ARENA_MODELS=${ENABLE_EVALUATION_ARENA_MODELS}
+      - ENABLE_LEADERBOARD=${ENABLE_LEADERBOARD}
     depends_on:
-      litellm:
-        condition: service_started
-      postgres_openwebui:
+      postgres:
         condition: service_healthy
     volumes:
       - openwebui_data:/app/backend/data
     restart: unless-stopped
 
-
   # LiteLLM Proxy service
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     ports:
-      - "8000:4000"
+      - "4000:4000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - PORT=4000
-      - MODEL_TYPE=openai
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/litellm
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY}
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_litellm:5432/${POSTGRES_DB}
-      - STORE_MODEL_IN_DB=True
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MCP_API_KEY=${MCP_API_KEY}
-      - PYTHONPATH=/app
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - LITELLM_LOG=INFO
+      - OTEL_EXPORTER=in_memory
     volumes:
       - ./config/litellm_config.yaml:/app/config.yaml
-      - ./rag_pipeline:/app/rag_pipeline
-    command: ["--config", "/app/config.yaml", "--detailed_debug"]
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "8"]
     depends_on:
-      postgres_litellm:
-        condition: service_healthy
-      redis:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
-  # PostgreSQL Database for OpenWebUI
-  postgres_openwebui:
+  # PostgreSQL Database (consolidated for all services)
+  postgres:
     image: postgres:14
-    ports:
-      - "5432:5432"  # OpenWebUI database
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DATABASE}
+      - POSTGRES_DB=postgres  # Default database
+      - POSTGRES_MULTIPLE_DATABASES=openwebui,litellm,mcp,insight_mesh
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_openwebui_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
@@ -87,46 +87,8 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
-    
-  # PostgreSQL Database for LiteLLM
-  postgres_litellm:
-    image: postgres:14
-    ports:
-      - "5433:5432"  # LiteLLM database
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-    volumes:
-      - postgres_litellm_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-    
-  # PostgreSQL Database for MCP
-  postgres_mcp:
-    image: postgres:14
-    ports:
-      - "5435:5432"  # MCP database
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=mcp
-    volumes:
-      - postgres_mcp_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-    
-  # Redis for LiteLLM caching
+
+  # Redis for caching
   redis:
     image: redis:7-alpine
     ports:
@@ -224,25 +186,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Dagster PostgreSQL Database
-  postgres_dagster:
-    image: postgres:14
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=insight_mesh
-    ports:
-      - "5434:5432"  # Using a different port to avoid conflicts
-    volumes:
-      - postgres_dagster_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
-
   # Dagster service for data pipeline orchestration
   dagster:
     build:
@@ -257,7 +200,7 @@ services:
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
-      - POSTGRES_HOST=postgres_dagster
+      - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -268,7 +211,7 @@ services:
     depends_on:
       - elasticsearch
       - neo4j
-      - postgres_dagster
+      - postgres
     restart: unless-stopped
 
   mcp:
@@ -278,7 +221,8 @@ services:
     environment:
       - MCP_API_KEY=${MCP_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_mcp:5432/mcp
+      - DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mcp
+      - SLACK_DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/insight_mesh
       - REDIS_URL=redis://redis:6379/0
       - ELASTICSEARCH_HOST=elasticsearch
       - NEO4J_URI=${NEO4J_URI}
@@ -289,7 +233,7 @@ services:
     ports:
       - "9090:9091"  # Map port 9090 to 9091 (FastMCP server port)
     depends_on:
-      postgres_mcp:
+      postgres:
         condition: service_healthy
       elasticsearch:
         condition: service_started
@@ -318,14 +262,11 @@ services:
 
 volumes:
   openwebui_data:
-  postgres_openwebui_data:
-  postgres_litellm_data:
-  postgres_mcp_data:
-  redis_data:
-  caddy_data:
-  caddy_config:
-  caddy_logs:
+  postgres_data:
   elasticsearch_data:
   neo4j_data:
   neo4j_logs:
-  postgres_dagster_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+  redis_data:

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from .cli_logs import log
 from .cli_services import service_group
 from .cli_tools import tool_group
+from .cli_migrate import migrate_group
 
 # Load environment variables
 load_dotenv()
@@ -43,6 +44,7 @@ def cli(ctx, verbose, version):
 cli.add_command(log)
 cli.add_command(service_group)
 cli.add_command(tool_group)
+cli.add_command(migrate_group)
 
 if __name__ == '__main__':
     cli() 

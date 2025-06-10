@@ -10,9 +10,14 @@ from datetime import datetime
 Base = declarative_base()
 
 # Database connection
-DB_URL = os.getenv("DB_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/openwebui")
+DB_URL = os.getenv("DB_URL", "postgresql+asyncpg://postgres:postgres@postgres:5432/mcp")
+# For Slack user lookups, connect to the insight_mesh database on the same server
+SLACK_DB_URL = os.getenv("SLACK_DB_URL", "postgresql+asyncpg://postgres:postgres@postgres:5432/insight_mesh")
+
 engine = create_async_engine(DB_URL, echo=True)
+slack_engine = create_async_engine(SLACK_DB_URL, echo=True)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+slack_async_session = sessionmaker(slack_engine, class_=AsyncSession, expire_on_commit=False)
 
 # OpenWebUI User model (matches the OpenWebUI database schema)
 class OpenWebUIUser(Base):
@@ -74,6 +79,48 @@ class Message(Base):
     content = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     metadata = Column(JSON, default=dict)
+
+# Slack models (for querying Slack data from insight_mesh database)
+class SlackUser(Base):
+    """SQLAlchemy model for Slack users."""
+    __tablename__ = 'slack_users'
+    
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255))
+    real_name = Column(String(255))
+    display_name = Column(String(255))
+    email = Column(String(255), unique=True)
+    is_admin = Column(Boolean, default=False)
+    is_owner = Column(Boolean, default=False)
+    is_bot = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False)
+    team_id = Column(String(255))
+    data = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<SlackUser(id='{self.id}', name='{self.name}', email='{self.email}')>"
+
+class SlackChannel(Base):
+    """SQLAlchemy model for Slack channels."""
+    __tablename__ = 'slack_channels'
+    
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255), index=True)
+    is_private = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False)
+    created = Column(DateTime(timezone=True))
+    creator = Column(String(255))
+    num_members = Column(Integer, default=0)
+    purpose = Column(String)
+    topic = Column(String)
+    data = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<SlackChannel(id='{self.id}', name='{self.name}')>"
 
 # Database operations
 async def get_openwebui_user_by_email(email: str) -> Optional[OpenWebUIUser]:
@@ -197,6 +244,23 @@ async def add_message(
         await session.refresh(message)
         return message
 
+# Slack user operations (query insight_mesh database)
+async def get_slack_user_by_id(slack_user_id: str) -> Optional[SlackUser]:
+    """Get Slack user by Slack user ID from insight_mesh database"""
+    async with slack_async_session() as session:
+        result = await session.execute(
+            select(SlackUser).where(SlackUser.id == slack_user_id)
+        )
+        return result.scalar_one_or_none()
+
+async def get_slack_user_by_email(email: str) -> Optional[SlackUser]:
+    """Get Slack user by email from insight_mesh database"""
+    async with slack_async_session() as session:
+        result = await session.execute(
+            select(SlackUser).where(SlackUser.email == email)
+        )
+        return result.scalar_one_or_none()
+
 # Initialize database
 async def init_db():
     """Initialize the database with tables"""
@@ -204,5 +268,5 @@ async def init_db():
         # Only create our tables, not the OpenWebUI tables
         await conn.run_sync(lambda sync_conn: Base.metadata.create_all(
             sync_conn,
-            tables=[User.__table__, Context.__table__, Conversation.__table__, Message.__table__]
+            tables=[User.__table__, Context.__table__, Conversation.__table__, Message.__table__, SlackUser.__table__, SlackChannel.__table__]
         )) 

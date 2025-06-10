@@ -13,6 +13,7 @@ from models import (
     UserInfo
 )
 from datetime import datetime, UTC
+from database import get_slack_user_by_id
 
 # Load environment variables
 load_dotenv()
@@ -89,14 +90,28 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
                 logger.error("Invalid Slack token format")
                 raise ValueError("Invalid Slack token format. Expected 'slack:{user_id}'")
             user_id = token.split(":", 1)[1]
-            logger.info("Extracted Slack user_id from token")
-            # Use default email for permission filtering
-            logger.info(f"Using default email for permission filtering")
+            logger.info(f"Extracted Slack user_id from token: {user_id}")
+            
+            # Look up the actual Slack user from the database
+            slack_user = await get_slack_user_by_id(user_id)
+            
+            if not slack_user:
+                logger.warning(f"Slack user {user_id} not found in database, using default")
+                # Fallback to default for now
+                return UserInfo(
+                    id=user_id,
+                    email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                    name="Default User",
+                    is_active=True,
+                    token_type=token_type
+                )
+            
+            logger.info(f"Found Slack user: {slack_user.email}")
             return UserInfo(
                 id=user_id,
-                email="tmfrisinger@gmail.com",  # Default email for permission filtering
-                name="Default User",
-                is_active=True,
+                email=slack_user.email or "tmfrisinger@gmail.com",  # Fallback to default if no email
+                name=slack_user.real_name or slack_user.display_name or slack_user.name or "Slack User",
+                is_active=not slack_user.deleted,
                 token_type=token_type
             )
         else:
