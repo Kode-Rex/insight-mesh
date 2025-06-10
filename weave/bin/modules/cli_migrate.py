@@ -131,6 +131,22 @@ def create_migration(database_name, message):
         '-c', str(migrations_dir / 'alembic.ini'),
         '-x', f'database={database_name}',
         'revision',
+        '-m', message
+    ]
+    
+    return run_command(cmd, cwd=str(project_root), env=env)
+
+def create_migration_autogenerate(database_name, message):
+    """Create a new migration with autogenerate for a specific database"""
+    env = get_env()
+    migrations_dir = get_migrations_dir()
+    project_root = get_project_root()
+    
+    cmd = [
+        'alembic',
+        '-c', str(migrations_dir / 'alembic.ini'),
+        '-x', f'database={database_name}',
+        'revision',
         '--autogenerate',
         '-m', message
     ]
@@ -273,14 +289,18 @@ def migrate_down(ctx, database, revision):
 @migrate_group.command('create')
 @click.argument('database', type=click.Choice(['mcp', 'insight_mesh']))
 @click.argument('message')
+@click.option('--autogenerate', '-a', is_flag=True, help='Auto-detect model changes')
 @click.pass_context
-def migrate_create(ctx, database, message):
+def migrate_create(ctx, database, message, autogenerate):
     """Create a new migration
     
     Examples:
     
     Create MCP migration:
     weave migrate create mcp "add user preferences table"
+    
+    Auto-generate migration based on model changes:
+    weave migrate create mcp "auto detected changes" --autogenerate
     
     Create Slack migration:
     weave migrate create insight_mesh "add slack message history"
@@ -291,8 +311,13 @@ def migrate_create(ctx, database, message):
         console.print(f"[blue]Creating migration for {database}: {message}[/blue]")
     
     try:
-        console.print(f"[bold blue]Creating new migration for {database} database[/bold blue]")
-        result = create_migration(database, message)
+        if autogenerate:
+            console.print(f"[bold blue]Creating auto-generated migration for {database} database[/bold blue]")
+            result = create_migration_autogenerate(database, message)
+        else:
+            console.print(f"[bold blue]Creating new migration for {database} database[/bold blue]")
+            result = create_migration(database, message)
+            
         console.print(f"[green]✅ Migration created successfully[/green]")
         
         if verbose and result:
