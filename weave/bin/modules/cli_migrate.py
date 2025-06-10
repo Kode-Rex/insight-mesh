@@ -89,99 +89,118 @@ def create_databases():
         console.print("[yellow]💡 Make sure PostgreSQL is running and accessible[/yellow]")
         return False
 
-def migrate_database(database_name, action='upgrade'):
-    """Run migration for a specific database"""
+def migrate_database(schema_name, action='upgrade'):
+    """Run migration for a specific schema using schema-specific directories"""
     env = get_env()
-    migrations_dir = get_migrations_dir()
     project_root = get_project_root()
     
-    # Set the database-specific environment
-    env['DATABASE_NAME'] = database_name
+    # Use schema-specific migration directory
+    schema_migrations_dir = project_root / '.weave' / 'migrations' / schema_name
+    
+    if not schema_migrations_dir.exists():
+        console.print(f"[red]❌ Migration directory for schema '{schema_name}' does not exist[/red]")
+        return False
     
     cmd = [
-        'alembic',
-        '-c', str(migrations_dir / 'alembic.ini'),
-        '-x', f'database={database_name}',
+        'python', '-m', 'alembic',
+        '-c', str(schema_migrations_dir / 'alembic.ini'),
         action
     ]
     
     if action == 'upgrade':
-        # Use branch-specific head for each database
-        cmd.append(f'{database_name}@head')
+        cmd.append('head')
     
     return run_command(cmd, cwd=str(project_root), env=env)
 
 def migrate_all(action='upgrade'):
-    """Run migrations for all databases"""
-    databases = get_managed_databases()
+    """Run migrations for all schemas"""
+    schemas = get_managed_databases()
     
-    for db in databases:
+    for schema in schemas:
         console.print(f"\n{'='*50}")
-        console.print(f"[bold blue]Running {action} for {db} database[/bold blue]")
+        console.print(f"[bold blue]Running {action} for {schema} schema[/bold blue]")
         console.print(f"{'='*50}")
-        migrate_database(db, action)
-        console.print(f"[green]✅ {action.capitalize()} completed for {db}[/green]")
+        migrate_database(schema, action)
+        console.print(f"[green]✅ {action.capitalize()} completed for {schema}[/green]")
 
-def create_migration(database_name, message):
-    """Create a new migration for a specific database"""
+def create_migration(schema_name, message):
+    """Create a new migration for a specific schema"""
     env = get_env()
-    migrations_dir = get_migrations_dir()
     project_root = get_project_root()
     
+    # Use schema-specific migration directory
+    schema_migrations_dir = project_root / '.weave' / 'migrations' / schema_name
+    
+    if not schema_migrations_dir.exists():
+        console.print(f"[red]❌ Migration directory for schema '{schema_name}' does not exist[/red]")
+        return False
+    
     cmd = [
-        'alembic',
-        '-c', str(migrations_dir / 'alembic.ini'),
-        '-x', f'database={database_name}',
+        'python', '-m', 'alembic',
+        '-c', str(schema_migrations_dir / 'alembic.ini'),
         'revision',
-        '--head', f'{database_name}@head',
-        '-m', f'{database_name}_{message}'
+        '-m', message
     ]
     
     return run_command(cmd, cwd=str(project_root), env=env)
 
-def create_migration_autogenerate(database_name, message):
-    """Create a new migration with autogenerate for a specific database"""
+def create_migration_autogenerate(schema_name, message):
+    """Create a new migration with autogenerate for a specific schema"""
     env = get_env()
-    migrations_dir = get_migrations_dir()
     project_root = get_project_root()
     
+    # Use schema-specific migration directory
+    schema_migrations_dir = project_root / '.weave' / 'migrations' / schema_name
+    
+    if not schema_migrations_dir.exists():
+        console.print(f"[red]❌ Migration directory for schema '{schema_name}' does not exist[/red]")
+        return False
+    
     cmd = [
-        'alembic',
-        '-c', str(migrations_dir / 'alembic.ini'),
-        '-x', f'database={database_name}',
+        'python', '-m', 'alembic',
+        '-c', str(schema_migrations_dir / 'alembic.ini'),
         'revision',
         '--autogenerate',
-        '--head', f'{database_name}@head',
-        '-m', f'{database_name}_{message}'
+        '-m', message
     ]
     
     return run_command(cmd, cwd=str(project_root), env=env)
 
-def show_current_revision(database_name):
-    """Show current revision for a database"""
+def show_current_revision(schema_name):
+    """Show current revision for a schema"""
     env = get_env()
-    migrations_dir = get_migrations_dir()
     project_root = get_project_root()
     
+    # Use schema-specific migration directory
+    schema_migrations_dir = project_root / '.weave' / 'migrations' / schema_name
+    
+    if not schema_migrations_dir.exists():
+        console.print(f"[red]❌ Migration directory for schema '{schema_name}' does not exist[/red]")
+        return ""
+    
     cmd = [
-        'alembic',
-        '-c', str(migrations_dir / 'alembic.ini'),
-        '-x', f'database={database_name}',
+        'python', '-m', 'alembic',
+        '-c', str(schema_migrations_dir / 'alembic.ini'),
         'current'
     ]
     
     return run_command(cmd, cwd=str(project_root), env=env)
 
-def show_migration_history(database_name):
-    """Show migration history for a database"""
+def show_migration_history(schema_name):
+    """Show migration history for a schema"""
     env = get_env()
-    migrations_dir = get_migrations_dir()
     project_root = get_project_root()
     
+    # Use schema-specific migration directory
+    schema_migrations_dir = project_root / '.weave' / 'migrations' / schema_name
+    
+    if not schema_migrations_dir.exists():
+        console.print(f"[red]❌ Migration directory for schema '{schema_name}' does not exist[/red]")
+        return ""
+    
     cmd = [
-        'alembic',
-        '-c', str(migrations_dir / 'alembic.ini'),
-        '-x', f'database={database_name}',
+        'python', '-m', 'alembic',
+        '-c', str(schema_migrations_dir / 'alembic.ini'),
         'history'
     ]
     
@@ -238,7 +257,7 @@ def migrate_up(ctx, database, skip_db_creation):
         if database == 'all':
             migrate_all('upgrade')
         else:
-            console.print(f"[bold blue]Running upgrade for {database} database[/bold blue]")
+            console.print(f"[bold blue]Running upgrade for {database} schema[/bold blue]")
             migrate_database(database, 'upgrade')
             console.print(f"[green]✅ Upgrade completed for {database}[/green]")
             
@@ -279,7 +298,7 @@ def migrate_down(ctx, database, revision):
         else:
             action = 'downgrade -1'  # Rollback one migration
             
-        console.print(f"[bold yellow]Running rollback for {database} database[/bold yellow]")
+        console.print(f"[bold yellow]Running rollback for {database} schema[/bold yellow]")
         migrate_database(database, action)
         console.print(f"[green]✅ Rollback completed for {database}[/green]")
         
@@ -316,10 +335,10 @@ def migrate_create(ctx, database, message, autogenerate):
     
     try:
         if autogenerate:
-            console.print(f"[bold blue]Creating auto-generated migration for {database} database[/bold blue]")
+            console.print(f"[bold blue]Creating auto-generated migration for {database} schema[/bold blue]")
             result = create_migration_autogenerate(database, message)
         else:
-            console.print(f"[bold blue]Creating new migration for {database} database[/bold blue]")
+            console.print(f"[bold blue]Creating new migration for {database} schema[/bold blue]")
             result = create_migration(database, message)
             
         console.print(f"[green]✅ Migration created successfully[/green]")
@@ -368,7 +387,7 @@ def migrate_status(ctx, database):
             
             console.print(table)
         else:
-            console.print(f"[bold blue]{database} database status:[/bold blue]")
+            console.print(f"[bold blue]{database} schema status:[/bold blue]")
             revision = show_current_revision(database)
             if revision.strip():
                 console.print(f"[green]Current revision: {revision.strip()}[/green]")
