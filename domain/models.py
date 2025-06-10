@@ -15,21 +15,23 @@ SlackBase = declarative_base()
 # MCP Domain Models
 # ============================================================================
 
-class OpenWebUIUser(MCPBase):
-    """OpenWebUI User model (matches the OpenWebUI database schema)"""
-    __tablename__ = "users"
-    
-    id = Column(String, primary_key=True)
-    email = Column(String, unique=True, index=True)
-    name = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    is_verified = Column(Boolean, default=False)
-    hashed_password = Column(String)
-    oauth_accounts = Column(JSON, default=list)
-    settings = Column(JSON, default=dict)
+# Note: OpenWebUIUser model commented out as it's not part of the insightmesh database
+# This would be in a separate OpenWebUI database if needed
+# class OpenWebUIUser(MCPBase):
+#     """OpenWebUI User model (matches the OpenWebUI database schema)"""
+#     __tablename__ = "users"
+#     
+#     id = Column(String, primary_key=True)
+#     email = Column(String, unique=True, index=True)
+#     name = Column(String)
+#     created_at = Column(DateTime(timezone=True), server_default=func.now())
+#     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+#     is_active = Column(Boolean, default=True)
+#     is_superuser = Column(Boolean, default=False)
+#     is_verified = Column(Boolean, default=False)
+#     hashed_password = Column(String)
+#     oauth_accounts = Column(JSON, default=list)
+#     settings = Column(JSON, default=dict)
 
 class MCPUser(MCPBase):
     """MCP internal user model"""
@@ -39,45 +41,45 @@ class MCPUser(MCPBase):
     email = Column(String, unique=True, index=True)
     name = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    user_metadata = Column(JSON, default=dict)
-    openwebui_id = Column(String, ForeignKey("users.id"))  # Reference to OpenWebUI user
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_active = Column(Boolean)
+    user_metadata = Column(JSON)
+    openwebui_id = Column(String)  # Removed ForeignKey since users table doesn't exist in insightmesh
 
 class Context(MCPBase):
     """Context storage for user sessions"""
     __tablename__ = "contexts"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("mcp_users.id"))
+    user_id = Column(String, ForeignKey("mcp_users.id"), index=True)
     content = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     expires_at = Column(DateTime(timezone=True))
-    is_active = Column(Boolean, default=True)
-    context_metadata = Column(JSON, default=dict)
+    is_active = Column(Boolean)
+    context_metadata = Column(JSON)
 
 class Conversation(MCPBase):
     """Conversation tracking"""
     __tablename__ = "conversations"
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, ForeignKey("mcp_users.id"))
+    user_id = Column(String, ForeignKey("mcp_users.id"), index=True)
     title = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    is_active = Column(Boolean, default=True)
-    conversation_metadata = Column(JSON, default=dict)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_active = Column(Boolean)
+    conversation_metadata = Column(JSON)
 
 class Message(MCPBase):
     """Message storage for conversations"""
     __tablename__ = "messages"
     
     id = Column(Integer, primary_key=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), index=True)
     role = Column(String)  # user, assistant, system
     content = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    message_metadata = Column(JSON, default=dict)
+    message_metadata = Column(JSON)
 
 # ============================================================================
 # Slack Domain Models
@@ -91,11 +93,11 @@ class SlackUser(SlackBase):
     name = Column(String(255))
     real_name = Column(String(255))
     display_name = Column(String(255))
-    email = Column(String(255), unique=True)
-    is_admin = Column(Boolean, default=False)
-    is_owner = Column(Boolean, default=False)
-    is_bot = Column(Boolean, default=False)
-    deleted = Column(Boolean, default=False)
+    email = Column(String(255), unique=True, index=True)
+    is_admin = Column(Boolean)
+    is_owner = Column(Boolean)
+    is_bot = Column(Boolean)
+    deleted = Column(Boolean)
     team_id = Column(String(255))
     data = Column(JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -110,11 +112,11 @@ class SlackChannel(SlackBase):
     
     id = Column(String(255), primary_key=True)
     name = Column(String(255), index=True)
-    is_private = Column(Boolean, default=False)
-    is_archived = Column(Boolean, default=False)
+    is_private = Column(Boolean)
+    is_archived = Column(Boolean)
     created = Column(DateTime(timezone=True))
     creator = Column(String(255))
-    num_members = Column(Integer, default=0)
+    num_members = Column(Integer)
     purpose = Column(Text)
     topic = Column(Text)
     data = Column(JSON)

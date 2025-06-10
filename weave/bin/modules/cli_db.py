@@ -20,8 +20,9 @@ def db_group():
 @click.option('--database', '-d', type=click.Choice(get_database_choices()), 
               default='all', help='Database to migrate')
 @click.option('--skip-db-creation', is_flag=True, help='Skip database creation step')
+@click.option('--dry-run', is_flag=True, help='Show what would be executed without running it')
 @click.pass_context
-def db_migrate(ctx, database, skip_db_creation):
+def db_migrate(ctx, database, skip_db_creation, dry_run):
     """Run database migrations (upgrade to latest)
     
     This command will:
@@ -36,9 +37,35 @@ def db_migrate(ctx, database, skip_db_creation):
     Migrate specific database:
     weave db migrate --database slack
     
+    Preview what would be migrated:
+    weave db migrate --dry-run
+    
     Skip database creation (if databases already exist):
     weave db migrate --skip-db-creation
     """
+    if dry_run:
+        console.print("[bold blue]🔍 DRY RUN - Showing what would be executed:[/bold blue]")
+        console.print()
+        
+        if not skip_db_creation:
+            console.print("[blue]📋 Would create databases:[/blue]")
+            from .config import get_all_databases
+            for db_name in get_all_databases():
+                console.print(f"  • {db_name}")
+            console.print()
+        
+        console.print("[blue]📋 Would run migrations for:[/blue]")
+        if database == 'all':
+            from .config import get_managed_databases
+            for db_name in get_managed_databases():
+                console.print(f"  • {db_name} database → {db_name}@head")
+        else:
+            console.print(f"  • {database} database → {database}@head")
+        
+        console.print()
+        console.print("[yellow]💡 Run without --dry-run to execute these operations[/yellow]")
+        return
+    
     # Call the underlying migrate_up function
     ctx.invoke(migrate_up, database=database, skip_db_creation=skip_db_creation)
 
@@ -46,8 +73,9 @@ def db_migrate(ctx, database, skip_db_creation):
 @click.option('--database', '-d', type=click.Choice(get_managed_databases()), 
               required=True, help='Database to rollback')
 @click.option('--revision', '-r', help='Target revision to rollback to')
+@click.option('--dry-run', is_flag=True, help='Show what would be rolled back without doing it')
 @click.pass_context
-def db_rollback(ctx, database, revision):
+def db_rollback(ctx, database, revision, dry_run):
     """Rollback database migrations
     
     Examples:
@@ -57,7 +85,26 @@ def db_rollback(ctx, database, revision):
     
     Rollback to specific revision:
     weave db rollback --database slack --revision 001
+    
+    Preview what would be rolled back:
+    weave db rollback --database slack --dry-run
     """
+    if dry_run:
+        console.print("[bold blue]🔍 DRY RUN - Showing what would be rolled back:[/bold blue]")
+        console.print()
+        
+        console.print(f"[blue]📋 Would rollback {database} database:[/blue]")
+        if revision:
+            console.print(f"  • Target revision: {revision}")
+            console.print(f"  • Action: Rollback to specific revision")
+        else:
+            console.print(f"  • Target: Previous migration")
+            console.print(f"  • Action: Rollback one migration")
+        
+        console.print()
+        console.print("[yellow]💡 Run without --dry-run to execute the rollback[/yellow]")
+        return
+    
     # Call the underlying migrate_down function
     ctx.invoke(migrate_down, database=database, revision=revision)
 
@@ -65,8 +112,9 @@ def db_rollback(ctx, database, revision):
 @click.argument('database', type=click.Choice(get_managed_databases()))
 @click.argument('message')
 @click.option('--auto', '-a', is_flag=True, help='Auto-detect model changes and generate migration')
+@click.option('--dry-run', is_flag=True, help='Show what migration would be created without creating it')
 @click.pass_context
-def db_create_migration(ctx, database, message, auto):
+def db_create_migration(ctx, database, message, auto, dry_run):
     """Create a new migration file (Auto detects model changes)
     
     This command can automatically detect changes in your domain models
@@ -80,23 +128,51 @@ def db_create_migration(ctx, database, message, auto):
     Auto-generate migration based on model changes:
     weave db create slack "auto detected changes" --auto
     
+    Preview what migration would be created:
+    weave db create slack "test migration" --dry-run
+    
     Create a new InsightMesh migration:
     weave db create insightmesh "add message threading"
     """
+    if dry_run:
+        console.print("[bold blue]🔍 DRY RUN - Showing what would be created:[/bold blue]")
+        console.print()
+        
+        # Generate the migration filename that would be created
+        import time
+        timestamp = int(time.time())
+        revision_id = f"{database}_{timestamp % 1000:03d}"
+        filename = f"{database}_{revision_id}_{message.lower().replace(' ', '_')}.py"
+        
+        console.print(f"[blue]📄 Would create migration file:[/blue]")
+        console.print(f"  • File: .weave/migrations/versions/{filename}")
+        console.print(f"  • Revision ID: {revision_id}")
+        console.print(f"  • Branch: {database}")
+        console.print(f"  • Message: {message}")
+        
+        if auto:
+            console.print(f"  • Type: Auto-generated (detects model changes)")
+        else:
+            console.print(f"  • Type: Empty template")
+        
+        console.print()
+        console.print("[yellow]💡 Run without --dry-run to create the migration file[/yellow]")
+        return
+    
     if auto:
         console.print(f"[blue]🔍 Auto-detecting model changes for {database} database...[/blue]")
         
         # Use alembic's autogenerate feature
         from .cli_migrate import create_migration_autogenerate
         try:
-            ctx.invoke(create_migration_autogenerate, database=database, message=message)
+            ctx.invoke(create_migration_autogenerate, database, message)
         except AttributeError:
             # Fallback to regular creation if autogenerate function doesn't exist
             console.print("[yellow]⚠️  Auto-detection not available, creating empty migration...[/yellow]")
-            ctx.invoke(migrate_create, database=database, message=message)
+            ctx.invoke(migrate_create, database, message)
     else:
         # Call the underlying migrate_create function
-        ctx.invoke(migrate_create, database=database, message=message)
+        ctx.invoke(migrate_create, database, message)
 
 @db_group.command('status')
 @click.option('--database', '-d', type=click.Choice(get_database_choices()), 
