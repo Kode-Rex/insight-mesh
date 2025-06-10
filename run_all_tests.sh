@@ -36,9 +36,6 @@ run_tests() {
   # Install dependencies
   echo "Installing dependencies..."
   pip install -r requirements.txt
-  if [ -f "requirements-dev.txt" ]; then
-    pip install -r requirements-dev.txt
-  fi
   
   # Ensure pytest is installed
   pip install pytest pytest-asyncio pytest-cov
