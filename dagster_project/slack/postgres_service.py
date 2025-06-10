@@ -3,12 +3,8 @@ import os
 import psycopg2
 from psycopg2.extras import execute_values
 from typing import Dict, Any, List, Optional
-import subprocess
-from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from alembic.config import Config as AlembicConfig
-from alembic import command
 
 from slack.models import Base, SlackUser, SlackChannel
 
@@ -17,7 +13,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SlackPostgresService:
-    """Service for handling PostgreSQL operations for Slack data."""
+    """Service for handling PostgreSQL operations for Slack data.
+    
+    Note: Database migrations are managed centrally by Weave (.weave/migrations/slack/).
+    This service assumes the database schema is already set up and does not run migrations.
+    """
     
     def __init__(self):
         # Get connection parameters from environment variables with sensible defaults
@@ -25,7 +25,7 @@ class SlackPostgresService:
         pg_port = os.getenv("POSTGRES_PORT", "5432")
         pg_user = os.getenv("POSTGRES_USER", "postgres")
         pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
-        pg_dbname = os.getenv("POSTGRES_DBNAME", "insightmesh")
+        pg_dbname = os.getenv("SLACK_DBNAME", "slack")
         
         # Connection string for our application database
         self.conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}"
@@ -36,30 +36,8 @@ class SlackPostgresService:
         # Initialize SQLAlchemy
         self.engine = create_engine(self.conn_string)
         self.Session = sessionmaker(bind=self.engine)
-        
-        # Run migrations
-        self._run_migrations()
 
-    def _run_migrations(self):
-        """Run database migrations using Alembic."""
-        try:
-            self.logger.info("Running database migrations")
-            # Get the path to the alembic.ini file
-            alembic_ini_path = Path(__file__).parent.parent / "migrations" / "alembic.ini"
-            
-            # Create Alembic config
-            alembic_cfg = AlembicConfig(str(alembic_ini_path))
-            
-            # Override the sqlalchemy.url in the config
-            alembic_cfg.set_main_option("sqlalchemy.url", self.conn_string)
-            
-            # Run the migrations
-            command.upgrade(alembic_cfg, "head")
-            
-            self.logger.info("Database migrations completed successfully")
-        except Exception as e:
-            self.logger.error(f"Error running migrations: {e}")
-            raise
+
     
     def _get_connection(self):
         """Get a connection to the PostgreSQL database using psycopg2."""
