@@ -25,7 +25,7 @@ class SlackPostgresService:
         pg_port = os.getenv("POSTGRES_PORT", "5432")
         pg_user = os.getenv("POSTGRES_USER", "postgres")
         pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
-        pg_dbname = os.getenv("POSTGRES_DBNAME", "insight_mesh")
+        pg_dbname = os.getenv("POSTGRES_DBNAME", "insightmesh")
         
         # Connection string for our application database
         self.conn_string = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}"

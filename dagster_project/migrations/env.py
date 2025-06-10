@@ -19,7 +19,7 @@ pg_host = os.getenv("POSTGRES_HOST", "postgres")
 pg_port = os.getenv("POSTGRES_PORT", "5432")
 pg_user = os.getenv("POSTGRES_USER", "postgres")
 pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
-pg_dbname = os.getenv("POSTGRES_DBNAME", "insight_mesh")
+pg_dbname = os.getenv("POSTGRES_DBNAME", "insightmesh")
 
 db_url = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_dbname}"
 config.set_main_option("sqlalchemy.url", db_url)

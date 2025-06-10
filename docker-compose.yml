@@ -204,7 +204,7 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DBNAME=insight_mesh
+      - POSTGRES_DBNAME=insightmesh
     volumes:
       - ./dagster_project:/app
       - ./credentials:/app/credentials
