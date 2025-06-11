@@ -19,6 +19,32 @@ from .slack import (
     SlackChannel
 )
 
+# Import all Graph models (Neo4j)
+from .graph import (
+    GraphBase,
+    GraphPerson,
+    GraphMessage,
+    GraphChannel,
+    GraphRelationship
+)
+
+# Import all Search models (Elasticsearch)
+from .search import (
+    SearchBase,
+    SearchPerson,
+    SearchMessage,
+    SearchChannel,
+    SearchDocument
+)
+
+# Import all Vector models
+from .vector import (
+    VectorBase,
+    VectorPerson,
+    VectorMessage,
+    VectorDocument
+)
+
 __all__ = [
     # InsightMesh models
     'InsightMeshBase',
@@ -29,5 +55,22 @@ __all__ = [
     # Slack models
     'SlackBase',
     'SlackUser',
-    'SlackChannel'
+    'SlackChannel',
+    # Graph models (Neo4j)
+    'GraphBase',
+    'GraphPerson',
+    'GraphMessage',
+    'GraphChannel',
+    'GraphRelationship',
+    # Search models (Elasticsearch)
+    'SearchBase',
+    'SearchPerson',
+    'SearchMessage',
+    'SearchChannel',
+    'SearchDocument',
+    # Vector models
+    'VectorBase',
+    'VectorPerson',
+    'VectorMessage',
+    'VectorDocument'
 ] 
