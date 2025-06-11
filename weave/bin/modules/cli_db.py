@@ -307,4 +307,121 @@ def db_seed(ctx, database):
     if database in ['insightmesh', 'all']:
         console.print("[blue]ℹ️  InsightMesh database seeding not yet implemented[/blue]")
     
-    console.print("[green]🌱 Database seeding completed![/green]") 
+    console.print("[green]🌱 Database seeding completed![/green]")
+
+@db_group.command('migrate-neo4j')
+@click.argument('action', type=click.Choice(['info', 'migrate', 'validate', 'clean']), default='migrate')
+@click.pass_context
+def db_migrate_neo4j(ctx, action):
+    """Run Neo4j migrations using neo4j-migrations tool.
+    
+    Actions:
+    - info: Show migration information
+    - migrate: Apply pending migrations
+    - validate: Validate migration files
+    - clean: Clean the database (removes all data)
+    """
+    console.print(f"[blue]🔄 Neo4j Migration: {action}[/blue]")
+    
+    from .cli_migrate import migrate_neo4j
+    
+    try:
+        result = migrate_neo4j(action)
+        if result:
+            console.print(f"[green]✅ Neo4j migration '{action}' completed successfully[/green]")
+        else:
+            console.print(f"[red]❌ Neo4j migration '{action}' failed[/red]")
+            ctx.exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error running Neo4j migration: {e}[/red]")
+        ctx.exit(1)
+
+@db_group.command('migrate-elasticsearch')
+@click.argument('action', type=click.Choice(['info', 'migrate']), default='migrate')
+@click.pass_context
+def db_migrate_elasticsearch(ctx, action):
+    """Run Elasticsearch migrations using HTTP-based migration files.
+    
+    Actions:
+    - info: Show current indices and templates
+    - migrate: Apply pending index migrations
+    """
+    console.print(f"[blue]🔄 Elasticsearch Migration: {action}[/blue]")
+    
+    from .cli_migrate import migrate_elasticsearch
+    
+    try:
+        result = migrate_elasticsearch(action)
+        if result:
+            console.print(f"[green]✅ Elasticsearch migration '{action}' completed successfully[/green]")
+        else:
+            console.print(f"[red]❌ Elasticsearch migration '{action}' failed[/red]")
+            ctx.exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error running Elasticsearch migration: {e}[/red]")
+        ctx.exit(1)
+
+@db_group.command('migrate-all')
+@click.option('--include-postgres', is_flag=True, default=True, help='Include PostgreSQL migrations')
+@click.option('--include-neo4j', is_flag=True, default=True, help='Include Neo4j migrations')
+@click.option('--include-elasticsearch', is_flag=True, default=True, help='Include Elasticsearch migrations')
+@click.pass_context
+def db_migrate_all(ctx, include_postgres, include_neo4j, include_elasticsearch):
+    """Run migrations for all database systems."""
+    console.print("[blue]🔄 Running migrations for all database systems[/blue]")
+    
+    success = True
+    
+    # PostgreSQL migrations
+    if include_postgres:
+        console.print("\n[blue]📊 PostgreSQL Migrations[/blue]")
+        from .cli_migrate import migrate_database
+        
+        for db_name in get_managed_databases():
+            try:
+                console.print(f"[blue]🔄 Migrating {db_name} database...[/blue]")
+                result = migrate_database(db_name, 'upgrade')
+                if result:
+                    console.print(f"[green]✅ {db_name} migration completed[/green]")
+                else:
+                    console.print(f"[red]❌ {db_name} migration failed[/red]")
+                    success = False
+            except Exception as e:
+                console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
+                success = False
+    
+    # Neo4j migrations
+    if include_neo4j:
+        console.print("\n[blue]🕸️  Neo4j Migrations[/blue]")
+        try:
+            from .cli_migrate import migrate_neo4j
+            result = migrate_neo4j('migrate')
+            if result:
+                console.print("[green]✅ Neo4j migration completed[/green]")
+            else:
+                console.print("[red]❌ Neo4j migration failed[/red]")
+                success = False
+        except Exception as e:
+            console.print(f"[red]❌ Error migrating Neo4j: {e}[/red]")
+            success = False
+    
+    # Elasticsearch migrations
+    if include_elasticsearch:
+        console.print("\n[blue]🔍 Elasticsearch Migrations[/blue]")
+        try:
+            from .cli_migrate import migrate_elasticsearch
+            result = migrate_elasticsearch('migrate')
+            if result:
+                console.print("[green]✅ Elasticsearch migration completed[/green]")
+            else:
+                console.print("[red]❌ Elasticsearch migration failed[/red]")
+                success = False
+        except Exception as e:
+            console.print(f"[red]❌ Error migrating Elasticsearch: {e}[/red]")
+            success = False
+    
+    if success:
+        console.print("\n[green]🎉 All database migrations completed successfully![/green]")
+    else:
+        console.print("\n[red]💥 Some migrations failed. Check the logs above.[/red]")
+        ctx.exit(1) 

@@ -29,4 +29,14 @@ neo4j-driver==5.28.1
 tika==3.1.0
 alembic==1.16.1
 pytest-mock==3.12.0
-pytest-cov==4.1.0 
+pytest-cov==4.1.0
+
+# Standard Migration Tools
+# Neo4j Migrations (Java-based, install separately)
+# Download from: https://github.com/michael-simons/neo4j-migrations/releases
+
+# Elasticsearch Evolution (Java-based, install separately) 
+# Download from: https://github.com/senacor/elasticsearch-evolution/releases
+
+# Python HTTP client for Elasticsearch migrations
+requests>=2.31.0 

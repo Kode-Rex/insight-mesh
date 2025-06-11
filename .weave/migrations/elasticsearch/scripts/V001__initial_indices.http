@@ -1,0 +1,229 @@
+# V001__initial_indices.http
+# Initial Elasticsearch indices and templates setup
+
+### Create google_drive_files index
+PUT /google_drive_files
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1,
+    "analysis": {
+      "analyzer": {
+        "custom_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "content": {
+        "type": "text",
+        "analyzer": "custom_analyzer"
+      },
+      "meta": {
+        "properties": {
+          "source": { "type": "keyword" },
+          "file_id": { "type": "keyword" },
+          "file_name": {
+            "type": "text",
+            "analyzer": "custom_analyzer",
+            "fields": {
+              "keyword": { "type": "keyword" }
+            }
+          },
+          "mime_type": { "type": "keyword" },
+          "created_time": { "type": "date" },
+          "modified_time": { "type": "date" },
+          "web_link": { "type": "keyword" },
+          "permissions": {
+            "type": "nested",
+            "properties": {
+              "type": { "type": "keyword" },
+              "role": { "type": "keyword" },
+              "email": { "type": "keyword" },
+              "domain": { "type": "keyword" }
+            }
+          },
+          "is_public": { "type": "boolean" },
+          "accessible_by_emails": { "type": "keyword" },
+          "accessible_by_domains": { "type": "keyword" },
+          "content_hash": { "type": "keyword" }
+        }
+      }
+    }
+  }
+}
+
+### Create slack_channels index
+PUT /slack_channels
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1,
+    "analysis": {
+      "analyzer": {
+        "custom_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "name": { "type": "keyword" },
+      "type": { "type": "keyword" },
+      "source": { "type": "keyword" },
+      "is_private": { "type": "boolean" },
+      "is_shared": { "type": "boolean" },
+      "is_org_shared": { "type": "boolean" },
+      "is_global_shared": { "type": "boolean" },
+      "created": { "type": "date" },
+      "creator": { "type": "keyword" },
+      "num_members": { "type": "integer" },
+      "topic": { "type": "text", "analyzer": "custom_analyzer" },
+      "purpose": { "type": "text", "analyzer": "custom_analyzer" },
+      "message_count": { "type": "integer" },
+      "pin_count": { "type": "integer" },
+      "bookmark_count": { "type": "integer" }
+    }
+  }
+}
+
+### Create slack_messages index
+PUT /slack_messages
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1,
+    "analysis": {
+      "analyzer": {
+        "custom_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "channel_id": { "type": "keyword" },
+      "channel_name": { "type": "keyword" },
+      "type": { "type": "keyword" },
+      "source": { "type": "keyword" },
+      "text": { "type": "text", "analyzer": "custom_analyzer" },
+      "user": { "type": "keyword" },
+      "timestamp": { "type": "date" },
+      "thread_ts": { "type": "keyword" },
+      "reactions": { "type": "nested" },
+      "attachments": { "type": "nested" },
+      "files": { "type": "nested" },
+      "links": { "type": "nested" }
+    }
+  }
+}
+
+### Create slack_users index
+PUT /slack_users
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "name": { "type": "keyword" },
+      "real_name": { "type": "text" },
+      "display_name": { "type": "text" },
+      "email": { "type": "keyword" },
+      "type": { "type": "keyword" },
+      "source": { "type": "keyword" },
+      "team_id": { "type": "keyword" },
+      "is_admin": { "type": "boolean" },
+      "is_owner": { "type": "boolean" },
+      "is_bot": { "type": "boolean" },
+      "is_app_user": { "type": "boolean" },
+      "deleted": { "type": "boolean" }
+    }
+  }
+}
+
+### Create web_pages index
+PUT /web_pages
+Content-Type: application/json
+
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 1,
+    "analysis": {
+      "analyzer": {
+        "custom_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "url": { "type": "keyword" },
+      "title": { "type": "text", "analyzer": "custom_analyzer" },
+      "content": { "type": "text", "analyzer": "custom_analyzer" },
+      "content_type": { "type": "keyword" },
+      "timestamp": { "type": "date" },
+      "depth": { "type": "integer" },
+      "author": { "type": "text" },
+      "num_pages": { "type": "integer" },
+      "extraction_method": { "type": "keyword" },
+      "links": { "type": "nested" },
+      "images": { "type": "nested" }
+    }
+  }
+}
+
+### Create index template for future indices
+PUT /_index_template/insightmesh_template
+Content-Type: application/json
+
+{
+  "index_patterns": ["google_drive_*", "slack_*", "web_*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "analysis": {
+        "analyzer": {
+          "custom_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "asciifolding"]
+          }
+        }
+      }
+    }
+  },
+  "priority": 100,
+  "version": 1,
+  "_meta": {
+    "description": "InsightMesh default template for all indices",
+    "created_by": "weave-cli"
+  }
+} 
