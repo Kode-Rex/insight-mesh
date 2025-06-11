@@ -52,7 +52,9 @@ services:
 
   # LiteLLM Proxy service
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    build:
+      context: ./config/litellm
+      dockerfile: Dockerfile
     ports:
       - "4000:4000"
     environment:
