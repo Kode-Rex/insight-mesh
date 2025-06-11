@@ -146,25 +146,12 @@
         "neo4j": {
             "description": "Knowledge graph database (files, relationships, entities)",
             "managed_by": "weave",
-            "type": "graph",
-            "connection": {
-                "uri_env": "NEO4J_URI",
-                "user_env": "NEO4J_USER", 
-                "password_env": "NEO4J_PASSWORD",
-                "database_env": "NEO4J_DATABASE"
-            }
+            "type": "graph"
         },
         "elasticsearch": {
             "description": "Search and analytics engine (document indexing, full-text search)",
             "managed_by": "weave",
-            "type": "search",
-            "connection": {
-                "host_env": "ELASTICSEARCH_HOST",
-                "port_env": "ELASTICSEARCH_PORT",
-                "scheme_env": "ELASTICSEARCH_SCHEME",
-                "user_env": "ELASTICSEARCH_USER",
-                "password_env": "ELASTICSEARCH_PASSWORD"
-            }
+            "type": "search"
         }
     }
 }
