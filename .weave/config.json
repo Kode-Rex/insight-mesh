@@ -132,32 +132,26 @@
             ]
         }
     },
-    "frameworks": {
-        "postgres": {
-            "type": "sql",
-            "migration_tool": "alembic"
-        },
-        "neo4j": {
-            "type": "graph",
-            "migration_tool": "cypher"
-        },
-        "elasticsearch": {
-            "type": "search",
-            "migration_tool": "index_settings"
-        }
-    },
     "databases": {
         "slack": {
             "description": "Slack integration data (users, channels, messages)",
             "managed_by": "weave",
-            "migrations": true,
-            "metadata": "SlackBase"
+            "type": "sql"
         },
         "insightmesh": {
             "description": "Core MCP server data (users, contexts, conversations)",
             "managed_by": "weave", 
-            "migrations": true,
-            "metadata": "MCPBase"
+            "type": "sql"
+        },
+        "neo4j": {
+            "description": "Knowledge graph database (files, relationships, entities)",
+            "managed_by": "weave",
+            "type": "graph"
+        },
+        "elasticsearch": {
+            "description": "Search and analytics engine (document indexing, full-text search)",
+            "managed_by": "weave",
+            "type": "search"
         }
     }
 }

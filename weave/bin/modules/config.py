@@ -33,11 +33,11 @@ def get_databases_config() -> Dict:
     return config.get('databases', {})
 
 def get_managed_databases() -> List[str]:
-    """Get list of databases managed by weave (with migrations)"""
+    """Get list of databases managed by weave"""
     databases_config = get_databases_config()
     return [
         db_name for db_name, db_config in databases_config.items()
-        if db_config.get('managed_by') == 'weave' and db_config.get('migrations', False)
+        if db_config.get('managed_by') == 'weave'
     ]
 
 def get_all_databases() -> List[str]:
@@ -269,4 +269,63 @@ def get_service_id_for_docker_service(docker_service_name):
                 return service_id
     
     # If no match found, return the original Docker service name
-    return docker_service_name 
+    return docker_service_name
+
+def get_databases_by_type(db_type: str) -> List[str]:
+    """Get list of databases by type (sql, graph, search)"""
+    databases_config = get_databases_config()
+    return [
+        db_name for db_name, db_config in databases_config.items()
+        if db_config.get('type') == db_type and db_config.get('managed_by') == 'weave'
+    ]
+
+def get_database_type(db_name: str) -> Optional[str]:
+    """Get the type of a database (sql, graph, search)"""
+    databases_config = get_databases_config()
+    return databases_config.get(db_name, {}).get('type')
+
+def get_database_migration_tool(db_name: str) -> Optional[str]:
+    """Get the migration tool for a database based on its type"""
+    db_type = get_database_type(db_name)
+    if not db_type:
+        return None
+    
+    # Get migration tool from frameworks configuration
+    config = load_config()
+    frameworks = config.get('frameworks', {})
+    framework_config = frameworks.get(db_type, {})
+    return framework_config.get('migration_tool')
+
+def get_database_connection_config(db_name: str) -> Dict:
+    """Get connection configuration for a database"""
+    databases_config = get_databases_config()
+    return databases_config.get(db_name, {}).get('connection', {})
+
+def get_sql_databases() -> List[str]:
+    """Get list of SQL databases (PostgreSQL with Alembic)"""
+    return get_databases_by_type('sql')
+
+def get_graph_databases() -> List[str]:
+    """Get list of graph databases (Neo4j)"""
+    return get_databases_by_type('graph')
+
+def get_search_databases() -> List[str]:
+    """Get list of search databases (Elasticsearch)"""
+    return get_databases_by_type('search')
+
+def get_all_database_types() -> List[str]:
+    """Get all unique database types"""
+    databases_config = get_databases_config()
+    types = set()
+    for db_config in databases_config.values():
+        if db_config.get('managed_by') == 'weave':
+            db_type = db_config.get('type')
+            if db_type:
+                types.add(db_type)
+    return sorted(list(types))
+
+def is_database_managed(db_name: str) -> bool:
+    """Check if a database is managed by weave"""
+    databases_config = get_databases_config()
+    db_config = databases_config.get(db_name, {})
+    return db_config.get('managed_by') == 'weave' 

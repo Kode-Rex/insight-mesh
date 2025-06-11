@@ -1,0 +1,4 @@
+#!/bin/bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk"
+export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
+"/Users/travisfrisinger/Documents/projects/insight-mesh/.weave/tools/neo4j-migrations-2.17.3/bin/neo4j-migrations" "$@"
