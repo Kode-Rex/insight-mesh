@@ -11,6 +11,13 @@ from .cli_services import service_group
 from .cli_tools import tool_group
 from .cli_db import db_group
 
+# Import domain commands
+try:
+    from ...cli_domains import domain, context, tool as domain_tool, schema
+    DOMAIN_COMMANDS_AVAILABLE = True
+except ImportError:
+    DOMAIN_COMMANDS_AVAILABLE = False
+
 # Load environment variables
 load_dotenv()
 
@@ -45,6 +52,13 @@ cli.add_command(log)
 cli.add_command(service_group)
 cli.add_command(tool_group)
 cli.add_command(db_group)
+
+# Add domain commands if available
+if DOMAIN_COMMANDS_AVAILABLE:
+    cli.add_command(domain)
+    cli.add_command(context)
+    cli.add_command(domain_tool, name='dtool')  # Avoid conflict with existing tool_group
+    cli.add_command(schema)
 
 if __name__ == '__main__':
     cli() 

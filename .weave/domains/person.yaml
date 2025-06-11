@@ -1,0 +1,34 @@
+domain: person
+description: "Represents people in the system, with relationships to messages, tasks, and tools"
+
+schemas:
+  sql: 
+    insightmesh: "insightmesh_users"
+    slack: "slack_users"
+  neo4j: "(:Person)"
+  elastic: "person_index"
+
+contexts:
+  - messages
+  - tasks
+  - channels
+
+tools:
+  - slack
+  - webcat
+  - gmail
+
+permissions:
+  default: read
+  roles:
+    - analyst
+    - support
+    - admin
+
+relationships:
+  - domain: messages
+    type: "has_many"
+    foreign_key: "user_id"
+  - domain: channels
+    type: "belongs_to_many"
+    through: "channel_members" 
