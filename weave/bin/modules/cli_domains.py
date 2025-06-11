@@ -104,47 +104,6 @@ def inject_context(domain, context, user_id, format):
         import yaml
         click.echo(yaml.dump(result))
 
-@click.group()
-def tool():
-    """Tool management commands"""
-    pass
-
-@tool.command()
-@click.option('--domain', help='Filter tools by domain')
-@click.option('--format', type=click.Choice(['json', 'yaml', 'table']), default='table')
-def list(domain, format):
-    """List all available tools"""
-    loader = get_loader()
-    tools = loader.list_tools(domain)
-    
-    if format == 'json':
-        click.echo(json.dumps(tools, indent=2))
-    elif format == 'yaml':
-        import yaml
-        click.echo(yaml.dump(tools))
-    else:
-        click.echo(f"Available tools{' for domain ' + domain if domain else ''}:")
-        for tool in tools:
-            config = loader.tools[tool]
-            click.echo(f"  {tool}: {config.description}")
-
-@tool.command()
-@click.argument('tool_name')
-def show(tool_name):
-    """Show detailed information about a tool"""
-    loader = get_loader()
-    if tool_name not in loader.tools:
-        click.echo(f"Tool '{tool_name}' not found")
-        return
-        
-    config = loader.tools[tool_name]
-    click.echo(f"Tool: {config.name}")
-    click.echo(f"Type: {config.type}")
-    click.echo(f"Description: {config.description}")
-    click.echo(f"Auth: {config.auth}")
-    click.echo(f"Domains: {', '.join(config.domains)}")
-    click.echo(f"Config: {json.dumps(config.config, indent=2)}")
-
 @click.command()
 @click.option('--domain', help='Show schema for specific domain')
 def schema(domain):
@@ -170,5 +129,4 @@ def register_domain_commands(cli):
     """Register domain commands with the main CLI"""
     cli.add_command(domain)
     cli.add_command(context)
-    cli.add_command(tool)
     cli.add_command(schema) 

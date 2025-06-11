@@ -13,10 +13,11 @@ from .cli_db import db_group
 
 # Import domain commands
 try:
-    from ...cli_domains import domain, context, tool as domain_tool, schema
+    from .cli_domains import domain, context, schema
     DOMAIN_COMMANDS_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     DOMAIN_COMMANDS_AVAILABLE = False
+    # print(f"Domain commands not available: {e}")
 
 # Load environment variables
 load_dotenv()
@@ -57,7 +58,6 @@ cli.add_command(db_group)
 if DOMAIN_COMMANDS_AVAILABLE:
     cli.add_command(domain)
     cli.add_command(context)
-    cli.add_command(domain_tool, name='dtool')  # Avoid conflict with existing tool_group
     cli.add_command(schema)
 
 if __name__ == '__main__':
