@@ -19,62 +19,67 @@ def db_group(ctx):
 
 # Wrap the migration commands with more intuitive names
 @db_group.command('migrate')
-@click.argument('database', type=click.Choice(get_database_choices()), required=False)
-@click.option('--skip-db-creation', is_flag=True, help='Skip database creation step')
-@click.option('--dry-run', is_flag=True, help='Show what would be executed without running it')
+@click.argument('database', type=click.Choice(get_managed_databases() + ['all']))
+@click.argument('action', default='upgrade')
 @click.pass_context
-def db_migrate(ctx, database, skip_db_creation, dry_run):
-    """Run database migrations (upgrade to latest)
+def db_migrate_smart(ctx, database, action):
+    """Smart migration command that detects database type and uses the appropriate tool.
     
-    This command will:
-    1. Create databases if they don't exist (unless --skip-db-creation is used)
-    2. Run table creation and data migrations
-    
-    Examples:
-    
-    Migrate all databases:
-    weave db migrate
-    weave db migrate all
-    
-    Migrate specific database:
-    weave db migrate slack
-    weave db migrate insightmesh
-    
-    Preview what would be migrated:
-    weave db migrate --dry-run
-    weave db migrate slack --dry-run
-    
-    Skip database creation (if databases already exist):
-    weave db migrate --skip-db-creation
+    This command automatically detects whether the database is SQL, graph, or search
+    and routes to the correct migration tool (Alembic, neo4j-migrations, or elasticsearch-evolution).
     """
-    # Default to 'all' if no database specified
-    if database is None:
-        database = 'all'
-    if dry_run:
-        console.print("[bold blue]🔍 DRY RUN - Showing what would be executed:[/bold blue]")
-        console.print()
-        
-        if not skip_db_creation:
-            console.print("[blue]📋 Would create databases:[/blue]")
-            from .config import get_all_databases
-            for db_name in get_all_databases():
-                console.print(f"  • {db_name}")
-            console.print()
-        
-        console.print("[blue]📋 Would run migrations for:[/blue]")
-        if database == 'all':
-            from .config import get_managed_databases
-            for db_name in get_managed_databases():
-                console.print(f"  • {db_name} database → {db_name}@head")
-        else:
-            console.print(f"  • {database} database → {database}@head")
-        
-        console.print()
-        console.print("[yellow]💡 Run without --dry-run to execute these operations[/yellow]")
+    from .config import (get_database_type, get_database_migration_tool, 
+                        get_all_databases, is_database_managed)
+    
+    if database == 'all':
+        # Route to migrate-all command
+        ctx.invoke(db_migrate_all)
         return
     
-    # Call the underlying migrate_up function
-    ctx.invoke(migrate_up, database=database, skip_db_creation=skip_db_creation)
+    # Validate database exists and is managed
+    if not is_database_managed(database):
+        console.print(f"[red]❌ Database '{database}' is not managed by weave or doesn't exist[/red]")
+        ctx.exit(1)
+    
+    db_type = get_database_type(database)
+    migration_tool = get_database_migration_tool(database)
+    
+    console.print(f"[blue]🔄 Migrating {database} database[/blue]")
+    console.print(f"[blue]📋 Type: {db_type}, Tool: {migration_tool}[/blue]")
+    
+    try:
+        if db_type == 'sql':
+            # Use Alembic for SQL databases
+            from .cli_migrate import migrate_database
+            result = migrate_database(database, action)
+            
+        elif db_type == 'graph':
+            # Use neo4j-migrations for graph databases
+            from .cli_migrate import migrate_neo4j
+            # Map action to neo4j-migrations commands
+            neo4j_action = action if action in ['migrate', 'info', 'validate', 'clean'] else 'migrate'
+            result = migrate_neo4j(neo4j_action)
+            
+        elif db_type == 'search':
+            # Use elasticsearch-evolution for search databases
+            from .cli_migrate import migrate_elasticsearch
+            # Map action to elasticsearch commands
+            es_action = action if action in ['migrate', 'info'] else 'migrate'
+            result = migrate_elasticsearch(es_action)
+            
+        else:
+            console.print(f"[red]❌ Unknown database type: {db_type}[/red]")
+            ctx.exit(1)
+        
+        if result:
+            console.print(f"[green]✅ {database} migration completed successfully[/green]")
+        else:
+            console.print(f"[red]❌ {database} migration failed[/red]")
+            ctx.exit(1)
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error migrating {database}: {e}[/red]")
+        ctx.exit(1)
 
 @db_group.command('rollback')
 @click.argument('database', type=click.Choice(get_managed_databases()))
@@ -362,66 +367,142 @@ def db_migrate_elasticsearch(ctx, action):
         ctx.exit(1)
 
 @db_group.command('migrate-all')
-@click.option('--include-postgres', is_flag=True, default=True, help='Include PostgreSQL migrations')
-@click.option('--include-neo4j', is_flag=True, default=True, help='Include Neo4j migrations')
-@click.option('--include-elasticsearch', is_flag=True, default=True, help='Include Elasticsearch migrations')
+@click.option('--include-sql', is_flag=True, default=True, help='Include SQL databases (PostgreSQL)')
+@click.option('--include-graph', is_flag=True, default=True, help='Include graph databases (Neo4j)')
+@click.option('--include-search', is_flag=True, default=True, help='Include search databases (Elasticsearch)')
 @click.pass_context
-def db_migrate_all(ctx, include_postgres, include_neo4j, include_elasticsearch):
-    """Run migrations for all database systems."""
+def db_migrate_all(ctx, include_sql, include_graph, include_search):
+    """Run migrations for all database systems based on their configured types."""
     console.print("[blue]🔄 Running migrations for all database systems[/blue]")
+    
+    from .config import (get_sql_databases, get_graph_databases, get_search_databases, 
+                        get_database_migration_tool, get_database_type)
     
     success = True
     
-    # PostgreSQL migrations
-    if include_postgres:
-        console.print("\n[blue]📊 PostgreSQL Migrations[/blue]")
-        from .cli_migrate import migrate_database
-        
-        for db_name in get_managed_databases():
-            try:
-                console.print(f"[blue]🔄 Migrating {db_name} database...[/blue]")
-                result = migrate_database(db_name, 'upgrade')
-                if result:
-                    console.print(f"[green]✅ {db_name} migration completed[/green]")
-                else:
-                    console.print(f"[red]❌ {db_name} migration failed[/red]")
+    # SQL databases (PostgreSQL with Alembic)
+    if include_sql:
+        sql_databases = get_sql_databases()
+        if sql_databases:
+            console.print(f"\n[blue]📊 SQL Databases ({len(sql_databases)})[/blue]")
+            from .cli_migrate import migrate_database
+            
+            for db_name in sql_databases:
+                try:
+                    migration_tool = get_database_migration_tool(db_name)
+                    console.print(f"[blue]🔄 Migrating {db_name} database (using {migration_tool})...[/blue]")
+                    result = migrate_database(db_name, 'upgrade')
+                    if result:
+                        console.print(f"[green]✅ {db_name} migration completed[/green]")
+                    else:
+                        console.print(f"[red]❌ {db_name} migration failed[/red]")
+                        success = False
+                except Exception as e:
+                    console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
                     success = False
-            except Exception as e:
-                console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
-                success = False
     
-    # Neo4j migrations
-    if include_neo4j:
-        console.print("\n[blue]🕸️  Neo4j Migrations[/blue]")
-        try:
+    # Graph databases (Neo4j)
+    if include_graph:
+        graph_databases = get_graph_databases()
+        if graph_databases:
+            console.print(f"\n[blue]🕸️  Graph Databases ({len(graph_databases)})[/blue]")
             from .cli_migrate import migrate_neo4j
-            result = migrate_neo4j('migrate')
-            if result:
-                console.print("[green]✅ Neo4j migration completed[/green]")
-            else:
-                console.print("[red]❌ Neo4j migration failed[/red]")
-                success = False
-        except Exception as e:
-            console.print(f"[red]❌ Error migrating Neo4j: {e}[/red]")
-            success = False
+            
+            for db_name in graph_databases:
+                try:
+                    migration_tool = get_database_migration_tool(db_name)
+                    console.print(f"[blue]🔄 Migrating {db_name} database (using {migration_tool})...[/blue]")
+                    result = migrate_neo4j('migrate')
+                    if result:
+                        console.print(f"[green]✅ {db_name} migration completed[/green]")
+                    else:
+                        console.print(f"[red]❌ {db_name} migration failed[/red]")
+                        success = False
+                except Exception as e:
+                    console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
+                    success = False
     
-    # Elasticsearch migrations
-    if include_elasticsearch:
-        console.print("\n[blue]🔍 Elasticsearch Migrations[/blue]")
-        try:
+    # Search databases (Elasticsearch)
+    if include_search:
+        search_databases = get_search_databases()
+        if search_databases:
+            console.print(f"\n[blue]🔍 Search Databases ({len(search_databases)})[/blue]")
             from .cli_migrate import migrate_elasticsearch
-            result = migrate_elasticsearch('migrate')
-            if result:
-                console.print("[green]✅ Elasticsearch migration completed[/green]")
-            else:
-                console.print("[red]❌ Elasticsearch migration failed[/red]")
-                success = False
-        except Exception as e:
-            console.print(f"[red]❌ Error migrating Elasticsearch: {e}[/red]")
-            success = False
+            
+            for db_name in search_databases:
+                try:
+                    migration_tool = get_database_migration_tool(db_name)
+                    console.print(f"[blue]🔄 Migrating {db_name} database (using {migration_tool})...[/blue]")
+                    result = migrate_elasticsearch('migrate')
+                    if result:
+                        console.print(f"[green]✅ {db_name} migration completed[/green]")
+                    else:
+                        console.print(f"[red]❌ {db_name} migration failed[/red]")
+                        success = False
+                except Exception as e:
+                    console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
+                    success = False
     
     if success:
         console.print("\n[green]🎉 All database migrations completed successfully![/green]")
     else:
         console.print("\n[red]💥 Some migrations failed. Check the logs above.[/red]")
-        ctx.exit(1) 
+        ctx.exit(1)
+
+@db_group.command('info')
+@click.pass_context
+def db_info(ctx):
+    """Show information about all configured databases including types and migration tools."""
+    from .config import (get_databases_config, get_database_type, get_database_migration_tool,
+                        get_database_connection_config, is_database_managed)
+    from rich.table import Table
+    
+    console.print("[blue]📊 Database Configuration[/blue]\n")
+    
+    databases_config = get_databases_config()
+    
+    if not databases_config:
+        console.print("[yellow]⚠️  No databases configured[/yellow]")
+        return
+    
+    # Create table
+    table = Table(show_header=True, header_style="bold blue")
+    table.add_column("Database", style="cyan", no_wrap=True)
+    table.add_column("Type", style="green")
+    table.add_column("Migration Tool", style="yellow")
+    table.add_column("Managed", style="magenta")
+    table.add_column("Description", style="white")
+    
+    for db_name, db_config in databases_config.items():
+        db_type = get_database_type(db_name) or "unknown"
+        migration_tool = get_database_migration_tool(db_name) or "none"
+        managed = "✅ Yes" if is_database_managed(db_name) else "❌ No"
+        description = db_config.get('description', 'No description')
+        
+        table.add_row(
+            db_name,
+            db_type,
+            migration_tool,
+            managed,
+            description
+        )
+    
+    console.print(table)
+    
+    # Show summary by type
+    console.print("\n[blue]📋 Summary by Type[/blue]")
+    from .config import get_sql_databases, get_graph_databases, get_search_databases
+    
+    sql_dbs = get_sql_databases()
+    graph_dbs = get_graph_databases()
+    search_dbs = get_search_databases()
+    
+    if sql_dbs:
+        console.print(f"[green]📊 SQL Databases ({len(sql_dbs)})[/green]: {', '.join(sql_dbs)}")
+    if graph_dbs:
+        console.print(f"[green]🕸️  Graph Databases ({len(graph_dbs)})[/green]: {', '.join(graph_dbs)}")
+    if search_dbs:
+        console.print(f"[green]🔍 Search Databases ({len(search_dbs)})[/green]: {', '.join(search_dbs)}")
+    
+    console.print(f"\n[blue]💡 Use 'weave db migrate <database>' to run migrations for any database[/blue]")
+    console.print(f"[blue]💡 Use 'weave db migrate all' to run migrations for all databases[/blue]") 

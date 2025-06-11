@@ -132,32 +132,39 @@
             ]
         }
     },
-    "frameworks": {
-        "postgres": {
-            "type": "sql",
-            "migration_tool": "alembic"
-        },
-        "neo4j": {
-            "type": "graph",
-            "migration_tool": "cypher"
-        },
-        "elasticsearch": {
-            "type": "search",
-            "migration_tool": "index_settings"
-        }
-    },
     "databases": {
         "slack": {
             "description": "Slack integration data (users, channels, messages)",
             "managed_by": "weave",
-            "migrations": true,
-            "metadata": "SlackBase"
+            "type": "sql"
         },
         "insightmesh": {
             "description": "Core MCP server data (users, contexts, conversations)",
             "managed_by": "weave", 
-            "migrations": true,
-            "metadata": "MCPBase"
+            "type": "sql"
+        },
+        "neo4j": {
+            "description": "Knowledge graph database (files, relationships, entities)",
+            "managed_by": "weave",
+            "type": "graph",
+            "connection": {
+                "uri_env": "NEO4J_URI",
+                "user_env": "NEO4J_USER", 
+                "password_env": "NEO4J_PASSWORD",
+                "database_env": "NEO4J_DATABASE"
+            }
+        },
+        "elasticsearch": {
+            "description": "Search and analytics engine (document indexing, full-text search)",
+            "managed_by": "weave",
+            "type": "search",
+            "connection": {
+                "host_env": "ELASTICSEARCH_HOST",
+                "port_env": "ELASTICSEARCH_PORT",
+                "scheme_env": "ELASTICSEARCH_SCHEME",
+                "user_env": "ELASTICSEARCH_USER",
+                "password_env": "ELASTICSEARCH_PASSWORD"
+            }
         }
     }
 }
