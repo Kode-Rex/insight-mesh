@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from weave.agents import agent, BaseAgent
+from weave.domains import AgentExecution, AgentObservability, AgentTrigger
 from typing import Dict, List, Any
 
 @agent("customer-support", "person", "messages", "Resolve customer issues using conversation history and available tools")
@@ -23,30 +24,31 @@ class CustomerSupportAgent(BaseAgent):
     
     @property
     def tools(self) -> List[str]:
+        """Tools this agent can use"""
         return ["slack", "webcat", "notion"]
     
     @property
-    def execution(self) -> Dict[str, Any]:
-        return {
-            "timeout": 300,
-            "retry": 3,
-            "cache": True,
-            "memory_limit": "512Mi"
-        }
+    def execution_config(self) -> AgentExecution:
+        return AgentExecution(
+            timeout=300,
+            retry=3,
+            cache=True,
+            memory_limit="512Mi"
+        )
     
     @property
-    def observability(self) -> Dict[str, Any]:
-        return {
-            "trace": True,
-            "metrics": True,
-            "logs": "info"
-        }
+    def observability(self) -> AgentObservability:
+        return AgentObservability(
+            trace=True,
+            metrics=True,
+            logs="info"
+        )
     
     @property
-    def triggers(self) -> List[Dict[str, Any]]:
+    def triggers(self) -> List[AgentTrigger]:
         return [
-            {"type": "slack_mention", "pattern": "@support"},
-            {"type": "webhook", "path": "/agents/customer-support"}
+            AgentTrigger(type="slack_mention", pattern="@support"),
+            AgentTrigger(type="webhook", path="/agents/customer-support")
         ]
     
     @property

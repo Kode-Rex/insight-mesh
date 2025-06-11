@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from weave.domains import domain, BaseDomain
+from weave.domains import domain, BaseDomain, Permission, Relationship, RelationshipType
 from typing import Dict, List, Any
 
 @domain("person", "Represents people in the system, with relationships to messages, tasks, and tools")
@@ -22,19 +22,15 @@ class PersonDomain(BaseDomain):
         return ["messages", "tasks", "channels"]
     
     @property
-    def tools(self) -> List[str]:
-        return ["slack", "webcat", "gmail"]
+    def permissions(self) -> Permission:
+        return Permission(
+            default="read",
+            roles=["analyst", "support", "admin"]
+        )
     
     @property
-    def permissions(self) -> Dict[str, Any]:
-        return {
-            "default": "read",
-            "roles": ["analyst", "support", "admin"]
-        }
-    
-    @property
-    def relationships(self) -> List[Dict[str, Any]]:
+    def relationships(self) -> List[Relationship]:
         return [
-            {"domain": "messages", "type": "has_many", "foreign_key": "user_id"},
-            {"domain": "channels", "type": "belongs_to_many", "through": "channel_members"}
+            Relationship("messages", RelationshipType.HAS_MANY, foreign_key="user_id"),
+            Relationship("channels", RelationshipType.BELONGS_TO_MANY, through="channel_members")
         ] 

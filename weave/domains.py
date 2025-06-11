@@ -3,11 +3,117 @@ Domain definitions using Python decorators and classes.
 Replaces YAML-based domain configuration with code.
 """
 
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Union
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum
 
-# Domain registry
+# Type models for better structure
+class RelationshipType(Enum):
+    HAS_MANY = "has_many"
+    BELONGS_TO = "belongs_to"
+    BELONGS_TO_MANY = "belongs_to_many"
+    HAS_ONE = "has_one"
+
+class AccessScope(Enum):
+    READ = "read"
+    WRITE = "write"
+    DELETE = "delete"
+    ADMIN = "admin"
+
+@dataclass
+class Relationship:
+    domain: str
+    type: RelationshipType
+    foreign_key: Optional[str] = None
+    through: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {"domain": self.domain, "type": self.type.value}
+        if self.foreign_key:
+            result["foreign_key"] = self.foreign_key
+        if self.through:
+            result["through"] = self.through
+        return result
+
+@dataclass
+class Permission:
+    default: str = "read"
+    roles: List[str] = field(default_factory=list)
+    scopes: Dict[str, str] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "default": self.default,
+            "roles": self.roles,
+            "scopes": self.scopes
+        }
+
+@dataclass
+class DatabaseSource:
+    database: str
+    table: str
+    filters: Dict[str, Any] = field(default_factory=dict)
+    joins: List[Dict[str, str]] = field(default_factory=list)
+    group_by: Optional[str] = None
+
+@dataclass
+class ElasticSource:
+    elastic: str
+    query_fields: List[str] = field(default_factory=list)
+    filters: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class ToolContext:
+    name: str
+    access: Dict[str, List[str]]  # roles and scopes
+    permissions: Dict[str, List[str]] = field(default_factory=dict)
+    use_cases: List[str] = field(default_factory=list)
+
+@dataclass
+class ToolConfig:
+    base_url: Optional[str] = None
+    rate_limit: Optional[int] = None
+    timeout: Optional[int] = None
+    max_results: Optional[int] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+@dataclass
+class AgentExecution:
+    timeout: int = 300
+    retry: int = 3
+    cache: bool = True
+    memory_limit: str = "512Mi"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return self.__dict__
+
+@dataclass
+class AgentObservability:
+    trace: bool = True
+    metrics: bool = True
+    logs: str = "info"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return self.__dict__
+
+@dataclass
+class AgentTrigger:
+    type: str
+    pattern: Optional[str] = None
+    path: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        result = {"type": self.type}
+        if self.pattern:
+            result["pattern"] = self.pattern
+        if self.path:
+            result["path"] = self.path
+        return result
+
+# Domain, context, tool, and agent registries
 _domains = {}
 _contexts = {}
 _tools = {}
@@ -52,7 +158,7 @@ class BaseDomain(ABC):
     @property
     @abstractmethod
     def schemas(self) -> Dict[str, Any]:
-        """Schema mappings across databases"""
+        """Database schemas for this domain"""
         pass
     
     @property
@@ -62,18 +168,12 @@ class BaseDomain(ABC):
         pass
     
     @property
-    @abstractmethod
-    def tools(self) -> List[str]:
-        """Available tools for this domain"""
-        pass
+    def permissions(self) -> Permission:
+        """Permissions for this domain"""
+        return Permission()
     
     @property
-    def permissions(self) -> Dict[str, Any]:
-        """Default permissions for this domain"""
-        return {"default": "read", "roles": ["user"]}
-    
-    @property
-    def relationships(self) -> List[Dict[str, Any]]:
+    def relationships(self) -> List[Relationship]:
         """Relationships to other domains"""
         return []
 
@@ -87,7 +187,7 @@ class BaseContext(ABC):
     
     @property
     @abstractmethod
-    def sources(self) -> List[Dict[str, Any]]:
+    def sources(self) -> List[Union[DatabaseSource, ElasticSource]]:
         """Data sources for this context"""
         pass
     
@@ -98,9 +198,9 @@ class BaseContext(ABC):
         pass
     
     @property
-    def permissions(self) -> Dict[str, Any]:
+    def permissions(self) -> Permission:
         """Permissions for this context"""
-        return {"default": "read"}
+        return Permission()
     
     @property
     def filters(self) -> Optional[Dict[str, Any]]:
@@ -128,25 +228,25 @@ class BaseTool(ABC):
     
     @property
     @abstractmethod
-    def contexts(self) -> List[Dict[str, Any]]:
-        """Context-specific configurations"""
+    def contexts(self) -> List[ToolContext]:
+        """Contexts this tool can be used in"""
         pass
     
     @property
     @abstractmethod
     def domains(self) -> List[str]:
-        """Domains this tool can work with"""
+        """Domains this tool applies to"""
         pass
     
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> ToolConfig:
         """Tool configuration"""
-        return {}
+        return ToolConfig()
     
     @property
-    def permissions(self) -> Dict[str, Any]:
-        """Default permissions"""
-        return {"default": "read"}
+    def permissions(self) -> Permission:
+        """Tool permissions"""
+        return Permission()
 
 # Domain definitions
 @domain("person", "Represents people in the system, with relationships to messages, tasks, and tools")
@@ -167,21 +267,17 @@ class PersonDomain(BaseDomain):
         return ["messages", "tasks", "channels"]
     
     @property
-    def tools(self) -> List[str]:
-        return ["slack", "webcat", "gmail"]
+    def permissions(self) -> Permission:
+        return Permission(
+            default="read",
+            roles=["analyst", "support", "admin"]
+        )
     
     @property
-    def permissions(self) -> Dict[str, Any]:
-        return {
-            "default": "read",
-            "roles": ["analyst", "support", "admin"]
-        }
-    
-    @property
-    def relationships(self) -> List[Dict[str, Any]]:
+    def relationships(self) -> List[Relationship]:
         return [
-            {"domain": "messages", "type": "has_many", "foreign_key": "user_id"},
-            {"domain": "channels", "type": "belongs_to_many", "through": "channel_members"}
+            Relationship("messages", RelationshipType.HAS_MANY, foreign_key="user_id"),
+            Relationship("channels", RelationshipType.BELONGS_TO_MANY, through="channel_members")
         ]
 
 @domain("messages", "Messages sent or received by people across different platforms")
@@ -202,14 +298,10 @@ class MessagesDomain(BaseDomain):
         return ["conversations", "channels", "threads"]
     
     @property
-    def tools(self) -> List[str]:
-        return ["slack", "gmail", "notion"]
-    
-    @property
-    def relationships(self) -> List[Dict[str, Any]]:
+    def relationships(self) -> List[Relationship]:
         return [
-            {"domain": "person", "type": "belongs_to", "foreign_key": "user_id"},
-            {"domain": "channels", "type": "belongs_to", "foreign_key": "channel_id"}
+            Relationship("person", RelationshipType.BELONGS_TO, foreign_key="user_id"),
+            Relationship("channels", RelationshipType.BELONGS_TO, foreign_key="channel_id")
         ]
 
 @domain("channels", "Communication channels across different platforms (Slack, Teams, etc.)")
@@ -225,36 +317,32 @@ class ChannelsDomain(BaseDomain):
     @property
     def contexts(self) -> List[str]:
         return ["messages", "members", "activity"]
-    
-    @property
-    def tools(self) -> List[str]:
-        return ["slack", "teams"]
 
 # Context definitions
 @context("conversations", "Threaded conversations across platforms with full message history", 
          domains=["messages", "person", "channels"])
 class ConversationsContext(BaseContext):
     @property
-    def sources(self) -> List[Dict[str, Any]]:
+    def sources(self) -> List[Union[DatabaseSource, ElasticSource]]:
         return [
-            {
-                "database": "insightmesh",
-                "table": "conversations",
-                "joins": [
+            DatabaseSource(
+                database="insightmesh",
+                table="conversations",
+                joins=[
                     {"table": "messages", "on": "conversations.id = messages.conversation_id"},
                     {"table": "insightmesh_users", "on": "conversations.user_id = insightmesh_users.id"}
                 ]
-            },
-            {
-                "database": "slack",
-                "table": "slack_messages",
-                "filters": {"thread_ts": "NOT NULL"},
-                "group_by": "thread_ts"
-            },
-            {
-                "elastic": "conversation_index",
-                "query_fields": ["title", "summary", "tags"]
-            }
+            ),
+            DatabaseSource(
+                database="slack",
+                table="slack_messages",
+                filters={"thread_ts": "NOT NULL"},
+                group_by="thread_ts"
+            ),
+            ElasticSource(
+                elastic="conversation_index",
+                query_fields=["title", "summary", "tags"]
+            )
         ]
     
     @property
@@ -262,7 +350,7 @@ class ConversationsContext(BaseContext):
         return ["slack", "notion", "webcat"]
     
     @property
-    def aggregations(self) -> Dict[str, Any]:
+    def aggregations(self) -> Dict[str, str]:
         return {
             "message_count": "COUNT(messages.id)",
             "last_activity": "MAX(messages.created_at)",
@@ -277,26 +365,31 @@ class SlackTool(BaseTool):
         return "oauth2"
     
     @property
-    def contexts(self) -> List[Dict[str, Any]]:
+    def contexts(self) -> List[ToolContext]:
         return [
-            {
-                "messages": {
-                    "access": {"roles": ["analyst", "support", "admin"], "scopes": ["read", "write"]},
-                    "permissions": {
-                        "read": ["channel:history", "im:history", "mpim:history"],
-                        "write": ["chat:write", "chat:write.public"]
-                    }
+            ToolContext(
+                name="messages",
+                access={"roles": ["analyst", "support", "admin"], "scopes": ["read", "write"]},
+                permissions={
+                    "read": ["channel:history", "im:history", "mpim:history"],
+                    "write": ["chat:write", "chat:write.public"]
                 }
-            },
-            {
-                "channels": {
-                    "access": {"roles": ["member", "admin"], "scopes": ["read", "write"]},
-                    "permissions": {
-                        "read": ["channels:read", "groups:read"],
-                        "write": ["channels:manage", "groups:write"]
-                    }
+            ),
+            ToolContext(
+                name="channels",
+                access={"roles": ["member", "admin"], "scopes": ["read", "write"]},
+                permissions={
+                    "read": ["channels:read", "groups:read"],
+                    "write": ["channels:manage", "groups:write"]
                 }
-            }
+            ),
+            ToolContext(
+                name="person",
+                access={"roles": ["admin"], "scopes": ["read"]},
+                permissions={
+                    "read": ["users:read", "users:read.email"]
+                }
+            )
         ]
     
     @property
@@ -304,11 +397,18 @@ class SlackTool(BaseTool):
         return ["person", "messages", "channels"]
     
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> ToolConfig:
+        return ToolConfig(
+            base_url="https://slack.com/api",
+            rate_limit=50,
+            timeout=30
+        )
+    
+    @property
+    def filters(self) -> Dict[str, str]:
         return {
-            "base_url": "https://slack.com/api",
-            "rate_limit": 50,
-            "timeout": 30
+            "user_scope": "$user.slack_id",
+            "team_scope": "$team.id"
         }
 
 @tool("webcat", "Web search service for research and information gathering", "mcp")
@@ -318,14 +418,13 @@ class WebcatTool(BaseTool):
         return "none"
     
     @property
-    def contexts(self) -> List[Dict[str, Any]]:
+    def contexts(self) -> List[ToolContext]:
         return [
-            {
-                "messages": {
-                    "access": {"roles": ["analyst", "researcher", "admin"], "scopes": ["read"]},
-                    "use_cases": ["fact_checking", "context_enrichment"]
-                }
-            }
+            ToolContext(
+                name="messages",
+                access={"roles": ["analyst", "researcher", "admin"], "scopes": ["read"]},
+                use_cases=["fact_checking", "context_enrichment"]
+            )
         ]
     
     @property
@@ -333,12 +432,43 @@ class WebcatTool(BaseTool):
         return ["person", "messages", "research"]
     
     @property
-    def config(self) -> Dict[str, Any]:
-        return {
-            "rate_limit": 100,
-            "timeout": 15,
-            "max_results": 10
-        }
+    def config(self) -> ToolConfig:
+        return ToolConfig(
+            rate_limit=100,
+            timeout=15,
+            max_results=10
+        )
+
+@tool("gmail", "Gmail integration for email management", "mcp")
+class GmailTool(BaseTool):
+    @property
+    def auth(self) -> str:
+        return "oauth2"
+    
+    @property
+    def contexts(self) -> List[ToolContext]:
+        return [
+            ToolContext(
+                name="messages",
+                access={"roles": ["analyst", "support", "admin"], "scopes": ["read", "write"]},
+                permissions={
+                    "read": ["gmail.readonly", "gmail.metadata"],
+                    "write": ["gmail.send", "gmail.compose"]
+                }
+            )
+        ]
+    
+    @property
+    def domains(self) -> List[str]:
+        return ["person", "messages"]
+    
+    @property
+    def config(self) -> ToolConfig:
+        return ToolConfig(
+            base_url="https://gmail.googleapis.com",
+            rate_limit=250,
+            timeout=30
+        )
 
 # Registry access functions
 def get_domain(name: str) -> Optional[BaseDomain]:

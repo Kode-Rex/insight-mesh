@@ -6,7 +6,7 @@ Replaces YAML-based agent configuration with code.
 from typing import List, Dict, Any, Optional, Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from domains import get_domain, get_context, get_tool
+from domains import get_domain, get_context, get_tool, AgentExecution, AgentObservability, AgentTrigger
 
 # Agent registry
 _agents = {}
@@ -44,29 +44,18 @@ class BaseAgent(ABC):
     
     @property
     def tools(self) -> List[str]:
-        """Tools available to this agent (from domain context)"""
-        if self.domain_context:
-            return [tool['name'] for tool in self.domain_context.get('tools', [])]
+        """Tools available to this agent (agent-specific)"""
         return []
     
     @property
-    def execution_config(self) -> Dict[str, Any]:
+    def execution_config(self) -> AgentExecution:
         """Execution configuration"""
-        return {
-            "timeout": 300,
-            "retry": 3,
-            "cache": True,
-            "memory_limit": "512Mi"
-        }
+        return AgentExecution()
     
     @property
-    def observability(self) -> Dict[str, Any]:
+    def observability(self) -> AgentObservability:
         """Observability configuration"""
-        return {
-            "trace": True,
-            "metrics": True,
-            "logs": "info"
-        }
+        return AgentObservability()
     
     @property
     def environment(self) -> Dict[str, str]:
@@ -76,6 +65,11 @@ class BaseAgent(ABC):
             "MAX_TOKENS": "2000",
             "TEMPERATURE": "0.7"
         }
+    
+    @property
+    def triggers(self) -> List[AgentTrigger]:
+        """Agent triggers"""
+        return []
     
     def inject_context(self) -> Dict[str, Any]:
         """Inject domain context for this agent"""
@@ -97,11 +91,11 @@ class BaseAgent(ABC):
             'schemas': domain.schemas,
             'sources': context.sources if context else [],
             'tools': [],
-            'permissions': domain.permissions
+            'permissions': domain.permissions.to_dict() if hasattr(domain.permissions, 'to_dict') else domain.permissions
         }
         
-        # Get available tools for this domain
-        for tool_name in domain.tools:
+        # Get available tools for this agent
+        for tool_name in self.tools:
             tool = get_tool(tool_name)
             if tool and self._domain in tool.domains:
                 result['tools'].append({
@@ -115,8 +109,8 @@ class BaseAgent(ABC):
     def _get_tool_permissions(self, tool, context_name: str) -> Dict[str, Any]:
         """Get tool permissions for specific context"""
         for context_config in tool.contexts:
-            if isinstance(context_config, dict) and context_name in context_config:
-                return context_config[context_name].get('permissions', {})
+            if hasattr(context_config, 'name') and context_config.name == context_name:
+                return context_config.permissions
         return {}
     
     @abstractmethod
@@ -135,6 +129,34 @@ class CustomerSupportAgent(BaseAgent):
         2. Searching for solutions using available tools
         3. Providing clear, actionable responses"""
     
+    @property
+    def tools(self) -> List[str]:
+        """Tools this agent can use"""
+        return ["slack", "webcat", "notion"]
+    
+    @property
+    def execution_config(self) -> AgentExecution:
+        return AgentExecution(timeout=300, retry=3, cache=True, memory_limit="512Mi")
+    
+    @property
+    def observability(self) -> AgentObservability:
+        return AgentObservability(trace=True, metrics=True, logs="info")
+    
+    @property
+    def triggers(self) -> List[AgentTrigger]:
+        return [
+            AgentTrigger(type="slack_mention", pattern="@support"),
+            AgentTrigger(type="webhook", path="/agents/customer-support")
+        ]
+    
+    @property
+    def environment(self) -> Dict[str, str]:
+        return {
+            "MODEL": "gpt-4o-mini",
+            "MAX_TOKENS": "2000",
+            "TEMPERATURE": "0.7"
+        }
+    
     async def execute(self, query: str, **kwargs) -> str:
         """Execute customer support logic"""
         # Access domain context
@@ -151,7 +173,7 @@ class CustomerSupportAgent(BaseAgent):
     
     def _is_technical_issue(self, query: str) -> bool:
         """Classify if this is a technical issue"""
-        technical_keywords = ["error", "bug", "crash", "not working", "broken"]
+        technical_keywords = ["error", "bug", "crash", "not working", "broken", "crashing"]
         return any(keyword in query.lower() for keyword in technical_keywords)
     
     def _is_billing_issue(self, query: str) -> bool:
@@ -179,13 +201,13 @@ class OnboardingWorkflowAgent(BaseAgent):
         return "Guide new customers through the complete onboarding process"
     
     @property
-    def execution_config(self) -> Dict[str, Any]:
-        return {
-            "timeout": 900,  # Longer for workflows
-            "retry": 3,
-            "cache": True,
-            "memory_limit": "1Gi"
-        }
+    def tools(self) -> List[str]:
+        """Tools this agent can use"""
+        return ["slack", "gmail", "notion"]
+    
+    @property
+    def execution_config(self) -> AgentExecution:
+        return AgentExecution(timeout=900, retry=3, cache=True, memory_limit="1Gi")  # Longer for workflows
     
     async def execute(self, email: str, name: str, **kwargs) -> str:
         """Execute onboarding workflow"""
@@ -204,23 +226,19 @@ class OnboardingWorkflowAgent(BaseAgent):
         prefs_result = await self._setup_preferences(email)
         steps.append(f"Preferences setup: {prefs_result}")
         
-        return f"Onboarding completed: {'; '.join(steps)}"
+        return " | ".join(steps)
     
     async def _create_account(self, email: str, name: str) -> str:
         """Create user account"""
-        # Access domain schemas to know which tables to use
-        schemas = self.domain_context.get('schemas', {})
-        sql_schemas = schemas.get('sql', {})
-        
-        # Would create account in insightmesh_users table
-        return f"Account created for {name} ({email}) in {sql_schemas.get('insightmesh', 'unknown')}"
+        # Simulate account creation
+        return f"Account created for {name} ({email})"
     
     async def _send_welcome_email(self, email: str) -> str:
         """Send welcome email"""
         return f"Welcome email sent to {email}"
     
     async def _setup_preferences(self, email: str) -> str:
-        """Setup initial user preferences"""
+        """Setup user preferences"""
         return f"Default preferences set for {email}"
 
 @agent("slack-responder", "messages", "conversations",
@@ -231,46 +249,50 @@ class SlackResponderAgent(BaseAgent):
         return "Automatically respond to Slack messages with appropriate actions"
     
     @property
+    def tools(self) -> List[str]:
+        """Tools this agent can use"""
+        return ["slack"]
+    
+    @property
     def environment(self) -> Dict[str, str]:
         return {
-            "MODEL": "gpt-3.5-turbo",  # Faster for real-time responses
-            "MAX_TOKENS": "500",
-            "TEMPERATURE": "0.3"
+            "MODEL": "gpt-4o-mini",
+            "MAX_TOKENS": "1000",
+            "TEMPERATURE": "0.3",  # Lower temperature for more consistent responses
+            "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}"
         }
     
     async def execute(self, message: str, channel: str, user: str, **kwargs) -> str:
         """Execute Slack response logic"""
-        # Check tool permissions
-        slack_tool = next((t for t in self.domain_context.get('tools', []) if t['name'] == 'slack'), None)
-        if not slack_tool:
-            return "Slack tool not available"
-        
-        # Check if we have write permissions
-        permissions = slack_tool.get('permissions', {})
-        if 'chat:write' not in permissions.get('write', []):
-            return "No write permissions for Slack"
-        
-        # Generate response based on message content
-        if '@support' in message:
+        # Analyze message content
+        if self._needs_support_escalation(message):
             return await self._escalate_to_support(message, user)
-        elif '?' in message:
+        elif self._is_question(message):
             return await self._answer_question(message)
         else:
             return await self._acknowledge_message(message)
     
+    def _needs_support_escalation(self, message: str) -> bool:
+        """Check if message needs support escalation"""
+        escalation_keywords = ["urgent", "critical", "down", "broken", "help"]
+        return any(keyword in message.lower() for keyword in escalation_keywords)
+    
+    def _is_question(self, message: str) -> bool:
+        """Check if message is a question"""
+        return message.strip().endswith('?') or message.lower().startswith(('how', 'what', 'when', 'where', 'why'))
+    
     async def _escalate_to_support(self, message: str, user: str) -> str:
-        """Escalate message to support team"""
-        return f"Support request from {user}: {message}. Notifying support team."
+        """Escalate to support team"""
+        return f"Escalating message from {user} to support team: {message}"
     
     async def _answer_question(self, message: str) -> str:
-        """Answer a question"""
-        return f"Question detected: {message}. Searching for answer..."
+        """Answer question from knowledge base"""
+        return f"Let me help you with that question: {message}"
     
     async def _acknowledge_message(self, message: str) -> str:
-        """Acknowledge a general message"""
-        return f"Message acknowledged: {message}"
+        """Acknowledge message"""
+        return f"Thanks for your message: {message}"
 
-# Registry access functions
 def get_agent(name: str) -> Optional[type]:
     """Get agent class by name"""
     return _agents.get(name)
@@ -286,17 +308,20 @@ def get_all_agents() -> Dict[str, BaseAgent]:
 def create_agent(name: str, user_id: str = None) -> Optional[BaseAgent]:
     """Create agent instance by name"""
     agent_cls = _agents.get(name)
-    return agent_cls(user_id=user_id) if agent_cls else None
+    if agent_cls:
+        return agent_cls(user_id=user_id)
+    return None
 
-# Context injection function (replaces domain_loader)
 def inject_context(domain: str, context: str, user_id: str) -> Dict[str, Any]:
-    """Inject context for domain-aware execution"""
+    """Inject domain context for agents"""
+    # Get domain and context instances
     domain_obj = get_domain(domain)
     context_obj = get_context(context)
     
     if not domain_obj:
         return {}
     
+    # Build context
     result = {
         'domain': domain,
         'context': context,
@@ -304,24 +329,17 @@ def inject_context(domain: str, context: str, user_id: str) -> Dict[str, Any]:
         'schemas': domain_obj.schemas,
         'sources': context_obj.sources if context_obj else [],
         'tools': [],
-        'permissions': domain_obj.permissions
+        'permissions': domain_obj.permissions.to_dict() if hasattr(domain_obj.permissions, 'to_dict') else domain_obj.permissions
     }
     
-    # Get available tools for this domain
-    for tool_name in domain_obj.tools:
-        tool = get_tool(tool_name)
-        if tool and domain in tool.domains:
-            result['tools'].append({
-                'name': tool_name,
-                'type': tool._tool_type,
-                'permissions': _get_tool_permissions(tool, context)
-            })
+    # Note: Tools are now agent-specific, not domain-specific
+    # This function is for general context injection without a specific agent
     
     return result
 
 def _get_tool_permissions(tool, context_name: str) -> Dict[str, Any]:
     """Get tool permissions for specific context"""
     for context_config in tool.contexts:
-        if isinstance(context_config, dict) and context_name in context_config:
-            return context_config[context_name].get('permissions', {})
+        if hasattr(context_config, 'name') and context_config.name == context_name:
+            return context_config.permissions
     return {} 

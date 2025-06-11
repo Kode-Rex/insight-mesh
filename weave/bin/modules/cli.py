@@ -71,6 +71,49 @@ def list():
     except ImportError:
         console.print("[red]Domain system not available[/red]")
 
+@domain.command()
+@click.argument('domain_name')
+def show(domain_name):
+    """Show detailed domain information"""
+    try:
+        from weave.domains import get_domain
+        domain_obj = get_domain(domain_name)
+        if domain_obj:
+            console.print(f"[bold blue]Domain: {domain_name}[/bold blue]")
+            console.print(f"Description: {domain_obj.description}")
+            
+            console.print("\n[bold green]Schemas:[/bold green]")
+            for db_type, schema_info in domain_obj.schemas.items():
+                console.print(f"  {db_type}: {schema_info}")
+            
+            console.print("\n[bold green]Contexts:[/bold green]")
+            for context in domain_obj.contexts:
+                console.print(f"  • {context}")
+            
+            console.print("\n[bold green]Permissions:[/bold green]")
+            perms = domain_obj.permissions
+            if hasattr(perms, 'default'):
+                console.print(f"  Default: {perms.default}")
+                console.print(f"  Roles: {', '.join(perms.roles)}")
+                if perms.scopes:
+                    console.print(f"  Scopes: {perms.scopes}")
+            else:
+                # Handle legacy dict format
+                console.print(f"  {perms}")
+            
+            console.print("\n[bold green]Relationships:[/bold green]")
+            for rel in domain_obj.relationships:
+                rel_info = f"  • {rel.domain} ({rel.type.value})"
+                if rel.foreign_key:
+                    rel_info += f" via {rel.foreign_key}"
+                if rel.through:
+                    rel_info += f" through {rel.through}"
+                console.print(rel_info)
+        else:
+            console.print(f"[red]Domain '{domain_name}' not found[/red]")
+    except ImportError:
+        console.print("[red]Domain system not available[/red]")
+
 @click.group()
 def context():
     """Manage contexts"""
@@ -142,6 +185,53 @@ def run(agent_name, user_id, query):
         console.print("[red]Agent system not available[/red]")
     except Exception as e:
         console.print(f"[red]Error running agent: {e}[/red]")
+
+@agent.command()
+@click.argument('agent_name')
+def show(agent_name):
+    """Show detailed agent information"""
+    try:
+        from weave.agents import get_agent
+        agent_cls = get_agent(agent_name)
+        if agent_cls:
+            agent_obj = agent_cls()
+            console.print(f"[bold blue]Agent: {agent_name}[/bold blue]")
+            console.print(f"Description: {agent_obj.description}")
+            console.print(f"Goal: {agent_obj.goal}")
+            
+            console.print("\n[bold green]Execution Config:[/bold green]")
+            exec_config = agent_obj.execution_config
+            console.print(f"  Timeout: {exec_config.timeout}s")
+            console.print(f"  Retry: {exec_config.retry}")
+            console.print(f"  Cache: {exec_config.cache}")
+            console.print(f"  Memory Limit: {exec_config.memory_limit}")
+            
+            console.print("\n[bold green]Observability:[/bold green]")
+            obs = agent_obj.observability
+            console.print(f"  Trace: {obs.trace}")
+            console.print(f"  Metrics: {obs.metrics}")
+            console.print(f"  Logs: {obs.logs}")
+            
+            console.print("\n[bold green]Tools:[/bold green]")
+            for tool in agent_obj.tools:
+                console.print(f"  • {tool}")
+            
+            console.print("\n[bold green]Environment:[/bold green]")
+            for key, value in agent_obj.environment.items():
+                console.print(f"  {key}: {value}")
+            
+            console.print("\n[bold green]Triggers:[/bold green]")
+            for trigger in agent_obj.triggers:
+                trigger_info = f"  • {trigger.type}"
+                if trigger.pattern:
+                    trigger_info += f" (pattern: {trigger.pattern})"
+                if trigger.path:
+                    trigger_info += f" (path: {trigger.path})"
+                console.print(trigger_info)
+        else:
+            console.print(f"[red]Agent '{agent_name}' not found[/red]")
+    except ImportError:
+        console.print("[red]Agent system not available[/red]")
 
 @click.group()
 def schema():
