@@ -215,7 +215,14 @@ def migrate_neo4j(action='info'):
     # Check if neo4j-migrations CLI is available
     neo4j_migrations_cmd = 'neo4j-migrations'
     
-    cmd = [neo4j_migrations_cmd]
+    # Neo4j migrations uses command line options, not config files
+    cmd = [
+        neo4j_migrations_cmd,
+        '--address', env.get('NEO4J_URI', 'bolt://localhost:7687'),
+        '--username', env.get('NEO4J_USER', 'neo4j'),
+        '--password', env.get('NEO4J_PASSWORD', 'password'),
+        '--location', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'scripts')
+    ]
     
     if action == 'info':
         cmd.append('info')
@@ -225,9 +232,6 @@ def migrate_neo4j(action='info'):
         cmd.append('validate')
     elif action == 'clean':
         cmd.append('clean')
-    
-    # Add configuration file
-    cmd.extend(['-c', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'neo4j.conf')])
     
     console.print(f"[blue]🔄 Running Neo4j migration: {action}[/blue]")
     return run_command(cmd, cwd=str(project_root), env=env)
@@ -382,22 +386,37 @@ def get_neo4j_migration_status() -> str:
     # Check if neo4j-migrations CLI is available
     neo4j_migrations_cmd = 'neo4j-migrations'
     
+    # Neo4j migrations uses command line options, not config files
     cmd = [
-        neo4j_migrations_cmd, 'info',
-        '-c', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'neo4j.conf')
+        neo4j_migrations_cmd,
+        '--address', env.get('NEO4J_URI', 'bolt://localhost:7687'),
+        '--username', env.get('NEO4J_USER', 'neo4j'),
+        '--password', env.get('NEO4J_PASSWORD', 'password'),
+        '--location', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'scripts'),
+        'info'
     ]
     
     try:
         result = run_command(cmd, cwd=str(project_root), env=env)
-        if result:
+        if result and result.returncode == 0:
             # Parse the output to extract meaningful status
-            lines = result.strip().split('\n')
-            for line in lines:
-                if 'Applied migrations:' in line or 'Current version:' in line:
-                    return line.strip()
-            # If no specific status found, return a summary
-            return f"{len(lines)} migration entries"
-        return "No status available"
+            output = result.stdout.strip() if result.stdout else ""
+            if output:
+                lines = output.split('\n')
+                for line in lines:
+                    if 'Applied migrations:' in line or 'Current version:' in line:
+                        return line.strip()
+                # If no specific status found, return a summary
+                return f"{len(lines)} migration entries"
+            return "No migrations found"
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            if "neo4j-migrations: command not found" in error_msg:
+                return "[yellow]neo4j-migrations not installed (run: weave db install-tools)[/yellow]"
+            elif "Connection" in error_msg or "refused" in error_msg:
+                return "[yellow]Neo4j not running or not accessible[/yellow]"
+            else:
+                return f"[red]Error: {error_msg}[/red]"
     except Exception as e:
         if "No such file or directory" in str(e):
             return "[yellow]neo4j-migrations not installed (run: weave db install-tools)[/yellow]"
@@ -461,6 +480,7 @@ def install_python_dependencies():
 
 def install_neo4j_migrations():
     """Install neo4j-migrations CLI tool"""
+    import subprocess
     console.print("[blue]📦 Installing neo4j-migrations CLI tool...[/blue]")
     
     # Check if Java is available, if not try to install OpenJDK
@@ -511,35 +531,133 @@ def install_neo4j_migrations():
         console.print("  4. Use Docker alternative: docker run --rm neo4j/neo4j-migrations")
         return False
     
-    # Try to install via different methods
-    install_methods = [
-        {
-            'name': 'Homebrew (macOS)',
-            'check': ['brew', '--version'],
-            'install': ['brew', 'install', 'neo4j-migrations']
-        },
-        {
-            'name': 'SDKMAN',
-            'check': ['sdk', 'version'],
-            'install': ['sdk', 'install', 'neo4j-migrations']
-        }
-    ]
+    # Try to install neo4j-migrations via JAR download
+    project_root = get_project_root()
+    neo4j_migrations_dir = project_root / '.weave' / 'tools'
+    neo4j_migrations_dir.mkdir(exist_ok=True)
     
-    for method in install_methods:
+    jar_path = neo4j_migrations_dir / 'neo4j-migrations.jar'
+    
+    if not jar_path.exists():
+        console.print("[blue]📦 Downloading neo4j-migrations JAR...[/blue]")
+        
         try:
-            # Check if the package manager is available
-            check_result = subprocess.run(method['check'], capture_output=True, text=True)
-            if check_result.returncode == 0:
-                console.print(f"[blue]📦 Installing via {method['name']}...[/blue]")
+            import requests
+            # Get the latest release from GitHub
+            api_url = "https://api.github.com/repos/michael-simons/neo4j-migrations/releases/latest"
+            response = requests.get(api_url)
+            
+            if response.status_code == 200:
+                release_data = response.json()
                 
-                install_result = subprocess.run(method['install'], capture_output=True, text=True)
-                if install_result.returncode == 0:
-                    console.print(f"[green]✅ neo4j-migrations installed via {method['name']}[/green]")
-                    return True
+                # Find the CLI ZIP asset (architecture independent version)
+                zip_asset = None
+                assets = release_data.get('assets', [])
+                
+                for asset in assets:
+                    name = asset['name']
+                    # Look for the architecture-independent ZIP file
+                    if (name.endswith('.zip') and 
+                        'neo4j-migrations-' in name and
+                        'linux' not in name and
+                        'windows' not in name and
+                        'osx' not in name):
+                        zip_asset = asset
+                        console.print(f"[green]Found CLI ZIP: {name}[/green]")
+                        break
+                
+                if zip_asset:
+                    console.print(f"[blue]📦 Downloading {zip_asset['name']}...[/blue]")
+                    
+                    # Download the ZIP
+                    zip_response = requests.get(zip_asset['browser_download_url'])
+                    if zip_response.status_code == 200:
+                        import zipfile
+                        import tempfile
+                        
+                        # Download to temp file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
+                            temp_zip.write(zip_response.content)
+                            temp_zip_path = temp_zip.name
+                        
+                        console.print(f"[green]✅ Downloaded {zip_asset['name']}[/green]")
+                        
+                        # Extract ZIP
+                        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                            zip_ref.extractall(neo4j_migrations_dir)
+                        
+                        # Find the bin directory with the executable
+                        bin_scripts = list(neo4j_migrations_dir.glob('**/bin/neo4j-migrations'))
+                        if bin_scripts:
+                            bin_script = bin_scripts[0]
+                            console.print(f"[green]✅ Found executable at {bin_script}[/green]")
+                            
+                            # Make sure the original executable has execute permissions
+                            bin_script.chmod(0o755)
+                            
+                            # Create wrapper script that calls the real executable
+                            wrapper_script = neo4j_migrations_dir / 'neo4j-migrations'
+                            with open(wrapper_script, 'w') as f:
+                                f.write(f'''#!/bin/bash
+export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"
+"{bin_script}" "$@"
+''')
+                            wrapper_script.chmod(0o755)
+                            
+                            # Auto-add to PATH by updating shell profile
+                            import os
+                            shell = os.environ.get('SHELL', '/bin/bash')
+                            if 'zsh' in shell:
+                                profile_file = Path.home() / '.zshrc'
+                            else:
+                                profile_file = Path.home() / '.bashrc'
+                            
+                            path_export = f'export PATH="{neo4j_migrations_dir}:$PATH"'
+                            
+                            # Check if already in profile
+                            if profile_file.exists():
+                                content = profile_file.read_text()
+                                if str(neo4j_migrations_dir) not in content:
+                                    with open(profile_file, 'a') as f:
+                                        f.write(f'\n# Neo4j Migrations CLI\n{path_export}\n')
+                                    console.print(f"[green]✅ Added to {profile_file}[/green]")
+                                else:
+                                    console.print(f"[blue]ℹ️  Already in {profile_file}[/blue]")
+                            else:
+                                with open(profile_file, 'w') as f:
+                                    f.write(f'# Neo4j Migrations CLI\n{path_export}\n')
+                                console.print(f"[green]✅ Created {profile_file}[/green]")
+                            
+                            # Also set for current session
+                            os.environ['PATH'] = f"{neo4j_migrations_dir}:{os.environ.get('PATH', '')}"
+                            
+                            # Auto-source the profile in the current session
+                            try:
+                                import subprocess
+                                subprocess.run(['source', str(profile_file)], shell=True, check=False)
+                            except:
+                                pass  # Ignore errors, PATH is already set above
+                            
+                            console.print(f"[green]🎉 neo4j-migrations installed and ready to use![/green]")
+                            console.print(f"[green]✅ PATH automatically updated for current session[/green]")
+                            
+                            # Cleanup
+                            os.unlink(temp_zip_path)
+                            return True
+                        else:
+                            console.print("[red]❌ Could not find neo4j-migrations executable in extracted ZIP[/red]")
+                    else:
+                        console.print(f"[red]❌ Failed to download ZIP: HTTP {zip_response.status_code}[/red]")
                 else:
-                    console.print(f"[yellow]⚠️  Failed to install via {method['name']}: {install_result.stderr}[/yellow]")
-        except FileNotFoundError:
-            continue
+                    console.print("[red]❌ Could not find CLI ZIP in release assets[/red]")
+            else:
+                console.print(f"[red]❌ Failed to get release info: HTTP {response.status_code}[/red]")
+                
+        except Exception as e:
+            console.print(f"[red]❌ Error downloading neo4j-migrations: {e}[/red]")
+    else:
+        console.print(f"[green]✅ neo4j-migrations JAR already exists at {jar_path}[/green]")
+        return True
     
     # If all methods fail, provide manual installation instructions
     console.print("[yellow]⚠️  Automatic installation failed. Manual installation required:[/yellow]")
@@ -591,6 +709,17 @@ def check_and_install_tools():
             
             if not tools_status['neo4j_migrations']:
                 success &= install_neo4j_migrations()
+            
+            # After installation, update the current environment
+            if success:
+                project_root = get_project_root()
+                neo4j_migrations_dir = project_root / '.weave' / 'tools'
+                if neo4j_migrations_dir.exists():
+                    import os
+                    current_path = os.environ.get('PATH', '')
+                    if str(neo4j_migrations_dir) not in current_path:
+                        os.environ['PATH'] = f"{neo4j_migrations_dir}:{current_path}"
+                        console.print(f"[green]✅ Updated PATH for current session[/green]")
             
             return success
         else:
