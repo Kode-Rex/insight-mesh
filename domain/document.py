@@ -1,256 +1,444 @@
 """
-Document domain model - composes document data from multiple sources.
+Document domain model - focused on Google Drive and Slack document management.
 
-This domain object aggregates documents from Slack files, email attachments,
-uploaded documents, and other sources to provide unified document management
-with business-relevant operations like content analysis and relationship tracking.
+This domain object provides a business interface for Google Drive documents
+and Slack files that have been indexed by the Dagster pipeline into Elasticsearch and Neo4j.
 """
 
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
-import hashlib
 
-# Import the data layer models (when they exist)
-# from data.slack import SlackFile
-# from data.insightmesh import Document as InsightMeshDocument
-# from data.email import EmailAttachment
+# Import Elasticsearch for document search
+try:
+    from elasticsearch import Elasticsearch
+    import os
+    
+    # Initialize Elasticsearch connection
+    es = Elasticsearch(
+        hosts=[{
+            "scheme": "http",
+            "host": os.getenv("ELASTICSEARCH_HOST", "localhost"),
+            "port": int(os.getenv("ELASTICSEARCH_PORT", "9200")),
+        }]
+    )
+except ImportError:
+    es = None
 
 
-class DocumentType(Enum):
-    """Types of documents in the system"""
-    SLACK_FILE = "slack_file"           # Slack uploaded file
-    EMAIL_ATTACHMENT = "email_attachment"  # Email attachment
-    UPLOADED_DOC = "uploaded_doc"       # Direct upload to InsightMesh
-    GENERATED_DOC = "generated_doc"     # AI-generated document
-    SHARED_LINK = "shared_link"         # Shared external document
-    CODE_FILE = "code_file"             # Code repository file
+class DocumentSource(Enum):
+    """Document sources"""
+    GOOGLE_DRIVE = "google_drive"
+    SLACK = "slack"
 
 
 class DocumentFormat(Enum):
     """Document formats"""
+    GOOGLE_DOC = "google_doc"           # Google Docs
+    GOOGLE_SHEET = "google_sheet"       # Google Sheets  
+    GOOGLE_SLIDE = "google_slide"       # Google Slides
     PDF = "pdf"
     DOCX = "docx"
     TXT = "txt"
     MD = "md"
-    HTML = "html"
     IMAGE = "image"
     VIDEO = "video"
     AUDIO = "audio"
-    SPREADSHEET = "spreadsheet"
-    PRESENTATION = "presentation"
     CODE = "code"
     UNKNOWN = "unknown"
 
 
 @dataclass
 class DocumentIdentity:
-    """Represents a document's identity across different systems"""
-    primary_id: str
+    """Represents a document's identity across Google Drive and Slack"""
+    file_id: str                        # Google Drive file ID or Slack file ID
     title: str
-    document_type: DocumentType
+    source: DocumentSource
     format: DocumentFormat
-    source_id: str
-    file_path: Optional[str] = None
-    url: Optional[str] = None
+    web_link: Optional[str] = None
     size_bytes: Optional[int] = None
-    content_hash: Optional[str] = None
-    created_date: Optional[datetime] = None
-    modified_date: Optional[datetime] = None
+    created_date: Optional[str] = None
+    modified_date: Optional[str] = None
+    mime_type: Optional[str] = None
+    # Slack specific fields
+    channel_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class Document:
     """
-    Domain Document - composes document data from multiple sources.
+    Domain Document - focused on Google Drive and Slack documents.
     
-    This class provides business-focused document management, aggregating
-    documents from different platforms with content analysis, relationship
-    tracking, and unified search capabilities.
+    This class provides business-focused document management for Google Drive
+    files and Slack files that have been indexed by the Dagster pipeline.
     """
     
     def __init__(self, identity: DocumentIdentity):
         self.identity = identity
-        self._slack_file: Optional[Any] = None  # Would be SlackFile when available
-        self._insightmesh_document: Optional[Any] = None  # Would be InsightMeshDocument
-        self._email_attachment: Optional[Dict[str, Any]] = None
-        self._content: Optional[str] = None  # Extracted text content
-        self._metadata: Dict[str, Any] = {}
-        self._loaded_source: Optional[str] = None
+        self._content: Optional[str] = None
+        self._permissions: List[Dict[str, Any]] = []
+        self._is_public: bool = False
         self._related_conversations: List[str] = []  # Conversation IDs
         self._related_users: List[str] = []  # User IDs who interacted with doc
+        # Slack specific metadata
+        self._slack_metadata: Dict[str, Any] = {}
     
     @classmethod
-    async def from_slack_file(cls, slack_file: Any, session_factories: Dict[str, Any] = None) -> 'Document':
-        """Create Document domain object from Slack file."""
-        # Determine format from file extension or mime type
-        file_format = cls._determine_format(
-            getattr(slack_file, 'name', ''),
-            getattr(slack_file, 'mimetype', '')
-        )
+    async def from_google_drive_data(cls, drive_data: Dict[str, Any]) -> 'Document':
+        """Create Document from Google Drive indexed data."""
+        # Determine format from MIME type
+        file_format = cls._determine_format_from_mime(drive_data.get('mime_type', ''))
         
         identity = DocumentIdentity(
-            primary_id=f"slack_file_{getattr(slack_file, 'id', '')}",
-            title=getattr(slack_file, 'name', 'Untitled'),
-            document_type=DocumentType.SLACK_FILE,
+            file_id=drive_data.get('file_id', ''),
+            title=drive_data.get('file_name', 'Untitled'),
+            source=DocumentSource.GOOGLE_DRIVE,
             format=file_format,
-            source_id=getattr(slack_file, 'id', ''),
-            url=getattr(slack_file, 'url_private', None),
-            size_bytes=getattr(slack_file, 'size', None),
-            created_date=getattr(slack_file, 'created', None)
+            web_link=drive_data.get('web_link'),
+            size_bytes=drive_data.get('size'),
+            created_date=drive_data.get('created_time'),
+            modified_date=drive_data.get('modified_time'),
+            mime_type=drive_data.get('mime_type')
         )
         
         document = cls(identity)
-        document._slack_file = slack_file
-        document._loaded_source = 'slack'
-        
-        # Extract metadata
-        document._metadata = {
-            'channel_id': getattr(slack_file, 'channels', [None])[0] if getattr(slack_file, 'channels', []) else None,
-            'user_id': getattr(slack_file, 'user', None),
-            'is_public': getattr(slack_file, 'is_public', False),
-            'comments_count': getattr(slack_file, 'comments_count', 0)
-        }
-        
-        # Track related users
-        if document._metadata.get('user_id'):
-            document._related_users.append(document._metadata['user_id'])
+        document._content = drive_data.get('content', '')
+        document._permissions = drive_data.get('permissions', [])
+        document._is_public = drive_data.get('is_public', False)
         
         return document
     
     @classmethod
-    async def from_email_attachment(cls, email_data: Dict[str, Any], attachment_data: Dict[str, Any]) -> 'Document':
-        """Create Document domain object from email attachment."""
-        file_format = cls._determine_format(
-            attachment_data.get('filename', ''),
-            attachment_data.get('content_type', '')
-        )
+    async def from_slack_data(cls, slack_data: Dict[str, Any]) -> 'Document':
+        """Create Document from Slack file data."""
+        # Determine format from MIME type or filename
+        file_format = cls._determine_format_from_mime(slack_data.get('mimetype', ''))
+        if file_format == DocumentFormat.UNKNOWN:
+            file_format = cls._determine_format_from_filename(slack_data.get('name', ''))
         
         identity = DocumentIdentity(
-            primary_id=f"email_attachment_{attachment_data.get('id', '')}",
-            title=attachment_data.get('filename', 'Untitled'),
-            document_type=DocumentType.EMAIL_ATTACHMENT,
+            file_id=slack_data.get('id', ''),
+            title=slack_data.get('name', 'Untitled'),
+            source=DocumentSource.SLACK,
             format=file_format,
-            source_id=attachment_data.get('id', ''),
-            size_bytes=attachment_data.get('size', None),
-            created_date=email_data.get('date', None)
+            web_link=slack_data.get('url_private') or slack_data.get('permalink'),
+            size_bytes=slack_data.get('size'),
+            created_date=slack_data.get('created'),
+            mime_type=slack_data.get('mimetype'),
+            channel_id=slack_data.get('channels', [None])[0] if slack_data.get('channels') else None,
+            user_id=slack_data.get('user')
         )
         
         document = cls(identity)
-        document._email_attachment = {**email_data, 'attachment': attachment_data}
-        document._loaded_source = 'email'
+        document._content = slack_data.get('content', '')
+        document._is_public = slack_data.get('is_public', False)
         
-        # Extract metadata
-        document._metadata = {
-            'email_subject': email_data.get('subject'),
-            'sender': email_data.get('from_email'),
-            'recipients': email_data.get('to', []),
-            'message_id': email_data.get('message_id')
+        # Store Slack-specific metadata
+        document._slack_metadata = {
+            'channels': slack_data.get('channels', []),
+            'comments_count': slack_data.get('comments_count', 0),
+            'is_external': slack_data.get('is_external', False),
+            'external_type': slack_data.get('external_type'),
+            'pretty_type': slack_data.get('pretty_type'),
+            'preview': slack_data.get('preview')
         }
         
         # Track related users
-        if document._metadata.get('sender'):
-            document._related_users.append(document._metadata['sender'])
+        if identity.user_id:
+            document._related_users.append(identity.user_id)
         
         return document
     
     @classmethod
-    async def from_uploaded_document(cls, doc_data: Dict[str, Any]) -> 'Document':
-        """Create Document domain object from directly uploaded document."""
-        file_format = cls._determine_format(
-            doc_data.get('filename', ''),
-            doc_data.get('content_type', '')
-        )
+    async def search_by_content(cls, query: str, limit: int = 20, sources: List[DocumentSource] = None) -> List['Document']:
+        """Search documents by content across Google Drive and/or Slack"""
+        if not es:
+            raise RuntimeError("Elasticsearch not available")
         
-        identity = DocumentIdentity(
-            primary_id=f"uploaded_doc_{doc_data.get('id', '')}",
-            title=doc_data.get('title', doc_data.get('filename', 'Untitled')),
-            document_type=DocumentType.UPLOADED_DOC,
-            format=file_format,
-            source_id=doc_data.get('id', ''),
-            file_path=doc_data.get('file_path'),
-            size_bytes=doc_data.get('size', None),
-            content_hash=doc_data.get('content_hash'),
-            created_date=doc_data.get('created_at'),
-            modified_date=doc_data.get('updated_at')
-        )
+        # Default to searching both sources
+        if sources is None:
+            sources = [DocumentSource.GOOGLE_DRIVE, DocumentSource.SLACK]
         
-        document = cls(identity)
-        document._insightmesh_document = doc_data
-        document._loaded_source = 'insightmesh'
-        
-        # Extract metadata
-        document._metadata = {
-            'uploader_id': doc_data.get('user_id'),
-            'tags': doc_data.get('tags', []),
-            'description': doc_data.get('description'),
-            'is_public': doc_data.get('is_public', False)
-        }
-        
-        # Track related users
-        if document._metadata.get('uploader_id'):
-            document._related_users.append(document._metadata['uploader_id'])
-        
-        return document
-    
-    @classmethod
-    async def find_documents_by_content(cls, search_query: str, 
-                                      document_types: List[DocumentType] = None,
-                                      date_range: tuple = None,
-                                      session_factories: Dict[str, Any] = None) -> List['Document']:
-        """Find documents across all sources by content search."""
-        documents = []
-        document_types = document_types or list(DocumentType)
-        start_date, end_date = date_range or (None, None)
-        
-        # Search Slack files (when implemented)
-        if DocumentType.SLACK_FILE in document_types:
-            slack_docs = await cls._search_slack_files(search_query, date_range, session_factories)
-            documents.extend(slack_docs)
-        
-        # Search uploaded documents (when implemented)
-        if DocumentType.UPLOADED_DOC in document_types:
-            uploaded_docs = await cls._search_uploaded_documents(search_query, date_range, session_factories)
-            documents.extend(uploaded_docs)
-        
-        # Search email attachments (when implemented)
-        if DocumentType.EMAIL_ATTACHMENT in document_types:
-            email_docs = await cls._search_email_attachments(search_query, date_range, session_factories)
-            documents.extend(email_docs)
-        
-        return documents
-    
-    @classmethod
-    async def find_documents_by_user(cls, user_id: str,
-                                   document_types: List[DocumentType] = None,
-                                   date_range: tuple = None,
-                                   session_factories: Dict[str, Any] = None) -> List['Document']:
-        """Find all documents associated with a user across all sources."""
-        documents = []
-        document_types = document_types or list(DocumentType)
-        
-        # This would search across all sources for documents uploaded, shared, or commented on by the user
-        # Implementation would depend on available data models
-        
-        return documents
-    
-    @classmethod
-    async def find_documents_in_conversation(cls, conversation_id: str,
-                                           session_factories: Dict[str, Any] = None) -> List['Document']:
-        """Find all documents shared or referenced in a conversation."""
         documents = []
         
-        # This would find documents shared in Slack channels, attached to emails in threads, etc.
-        # Implementation would depend on conversation context and available data
+        # Search Google Drive if requested
+        if DocumentSource.GOOGLE_DRIVE in sources:
+            try:
+                response = es.search(
+                    index="google_drive_files",
+                    body={
+                        "query": {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["content", "meta.file_name^2"],
+                                "type": "best_fields"
+                            }
+                        },
+                        "size": limit,
+                        "_source": ["content", "meta"]
+                    }
+                )
+                
+                for hit in response["hits"]["hits"]:
+                    meta = hit["_source"]["meta"]
+                    drive_data = {
+                        'file_id': meta["file_id"],
+                        'file_name': meta["file_name"],
+                        'mime_type': meta["mime_type"],
+                        'content': hit["_source"]["content"],
+                        'web_link': meta.get("web_link"),
+                        'created_time': meta.get("created_time"),
+                        'modified_time': meta.get("modified_time"),
+                        'is_public': meta.get("is_public", False),
+                        'permissions': meta.get("permissions", [])
+                    }
+                    doc = await cls.from_google_drive_data(drive_data)
+                    documents.append(doc)
+            except Exception as e:
+                print(f"Error searching Google Drive documents: {e}")
         
-        return documents
+        # Search Slack if requested
+        if DocumentSource.SLACK in sources:
+            try:
+                response = es.search(
+                    index="slack_messages",  # Assuming Slack files are indexed here
+                    body={
+                        "query": {
+                            "bool": {
+                                "must": [
+                                    {
+                                        "multi_match": {
+                                            "query": query,
+                                            "fields": ["content", "files.name^2"],
+                                            "type": "best_fields"
+                                        }
+                                    },
+                                    {
+                                        "exists": {
+                                            "field": "files"
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "size": limit,
+                        "_source": ["files", "channel", "user", "ts"]
+                    }
+                )
+                
+                for hit in response["hits"]["hits"]:
+                    files = hit["_source"].get("files", [])
+                    for file_data in files:
+                        slack_data = {
+                            **file_data,
+                            'channels': [hit["_source"].get("channel")],
+                            'user': hit["_source"].get("user"),
+                            'created': hit["_source"].get("ts")
+                        }
+                        doc = await cls.from_slack_data(slack_data)
+                        documents.append(doc)
+            except Exception as e:
+                print(f"Error searching Slack documents: {e}")
+        
+        return documents[:limit]  # Ensure we don't exceed the limit
     
     @classmethod
-    def _determine_format(cls, filename: str, content_type: str = '') -> DocumentFormat:
-        """Determine document format from filename and content type."""
+    async def get_by_file_id(cls, file_id: str, source: DocumentSource) -> Optional['Document']:
+        """Get a specific document by its file ID and source"""
+        if not es:
+            raise RuntimeError("Elasticsearch not available")
+        
+        try:
+            if source == DocumentSource.GOOGLE_DRIVE:
+                response = es.get(
+                    index="google_drive_files",
+                    id=file_id,
+                    _source=["content", "meta"]
+                )
+                
+                meta = response["_source"]["meta"]
+                drive_data = {
+                    'file_id': meta["file_id"],
+                    'file_name': meta["file_name"],
+                    'mime_type': meta["mime_type"],
+                    'content': response["_source"]["content"],
+                    'web_link': meta.get("web_link"),
+                    'created_time': meta.get("created_time"),
+                    'modified_time': meta.get("modified_time"),
+                    'is_public': meta.get("is_public", False),
+                    'permissions': meta.get("permissions", [])
+                }
+                return await cls.from_google_drive_data(drive_data)
+            
+            elif source == DocumentSource.SLACK:
+                # Search for Slack file by ID
+                response = es.search(
+                    index="slack_messages",
+                    body={
+                        "query": {
+                            "nested": {
+                                "path": "files",
+                                "query": {
+                                    "term": {
+                                        "files.id": file_id
+                                    }
+                                }
+                            }
+                        },
+                        "size": 1,
+                        "_source": ["files", "channel", "user", "ts"]
+                    }
+                )
+                
+                if response["hits"]["hits"]:
+                    hit = response["hits"]["hits"][0]
+                    files = hit["_source"].get("files", [])
+                    for file_data in files:
+                        if file_data.get("id") == file_id:
+                            slack_data = {
+                                **file_data,
+                                'channels': [hit["_source"].get("channel")],
+                                'user': hit["_source"].get("user"),
+                                'created': hit["_source"].get("ts")
+                            }
+                            return await cls.from_slack_data(slack_data)
+                
+        except Exception as e:
+            print(f"Error getting document {file_id}: {e}")
+        
+        return None
+    
+    @classmethod
+    async def list_recent_documents(cls, days: int = 7, limit: int = 20, sources: List[DocumentSource] = None) -> List['Document']:
+        """List recently modified documents from Google Drive and/or Slack"""
+        if not es:
+            raise RuntimeError("Elasticsearch not available")
+        
+        if sources is None:
+            sources = [DocumentSource.GOOGLE_DRIVE, DocumentSource.SLACK]
+        
+        documents = []
+        threshold_date = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        # Get recent Google Drive documents
+        if DocumentSource.GOOGLE_DRIVE in sources:
+            try:
+                response = es.search(
+                    index="google_drive_files",
+                    body={
+                        "query": {
+                            "range": {
+                                "meta.modified_time": {
+                                    "gte": threshold_date
+                                }
+                            }
+                        },
+                        "sort": [
+                            {"meta.modified_time": {"order": "desc"}}
+                        ],
+                        "size": limit,
+                        "_source": ["content", "meta"]
+                    }
+                )
+                
+                for hit in response["hits"]["hits"]:
+                    meta = hit["_source"]["meta"]
+                    drive_data = {
+                        'file_id': meta["file_id"],
+                        'file_name': meta["file_name"],
+                        'mime_type': meta["mime_type"],
+                        'content': hit["_source"]["content"],
+                        'web_link': meta.get("web_link"),
+                        'created_time': meta.get("created_time"),
+                        'modified_time': meta.get("modified_time"),
+                        'is_public': meta.get("is_public", False),
+                        'permissions': meta.get("permissions", [])
+                    }
+                    doc = await cls.from_google_drive_data(drive_data)
+                    documents.append(doc)
+            except Exception as e:
+                print(f"Error getting recent Google Drive documents: {e}")
+        
+        # Get recent Slack files
+        if DocumentSource.SLACK in sources:
+            try:
+                response = es.search(
+                    index="slack_messages",
+                    body={
+                        "query": {
+                            "bool": {
+                                "must": [
+                                    {
+                                        "range": {
+                                            "ts": {
+                                                "gte": threshold_date
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "exists": {
+                                            "field": "files"
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "sort": [
+                            {"ts": {"order": "desc"}}
+                        ],
+                        "size": limit,
+                        "_source": ["files", "channel", "user", "ts"]
+                    }
+                )
+                
+                for hit in response["hits"]["hits"]:
+                    files = hit["_source"].get("files", [])
+                    for file_data in files:
+                        slack_data = {
+                            **file_data,
+                            'channels': [hit["_source"].get("channel")],
+                            'user': hit["_source"].get("user"),
+                            'created': hit["_source"].get("ts")
+                        }
+                        doc = await cls.from_slack_data(slack_data)
+                        documents.append(doc)
+            except Exception as e:
+                print(f"Error getting recent Slack documents: {e}")
+        
+        # Sort all documents by date and limit
+        documents.sort(key=lambda d: d.identity.modified_date or d.identity.created_date or "", reverse=True)
+        return documents[:limit]
+    
+    @classmethod
+    def _determine_format_from_mime(cls, mime_type: str) -> DocumentFormat:
+        """Determine document format from MIME type."""
+        if mime_type == "application/vnd.google-apps.document":
+            return DocumentFormat.GOOGLE_DOC
+        elif mime_type == "application/vnd.google-apps.spreadsheet":
+            return DocumentFormat.GOOGLE_SHEET
+        elif mime_type == "application/vnd.google-apps.presentation":
+            return DocumentFormat.GOOGLE_SLIDE
+        elif "pdf" in mime_type:
+            return DocumentFormat.PDF
+        elif "word" in mime_type or "document" in mime_type:
+            return DocumentFormat.DOCX
+        elif "text" in mime_type:
+            return DocumentFormat.TXT
+        elif "image" in mime_type:
+            return DocumentFormat.IMAGE
+        elif "video" in mime_type:
+            return DocumentFormat.VIDEO
+        elif "audio" in mime_type:
+            return DocumentFormat.AUDIO
+        
+        return DocumentFormat.UNKNOWN
+    
+    @classmethod
+    def _determine_format_from_filename(cls, filename: str) -> DocumentFormat:
+        """Determine document format from filename."""
         filename_lower = filename.lower()
         
-        # Check by file extension
         if filename_lower.endswith(('.pdf',)):
             return DocumentFormat.PDF
         elif filename_lower.endswith(('.docx', '.doc')):
@@ -259,61 +447,32 @@ class Document:
             return DocumentFormat.TXT
         elif filename_lower.endswith(('.md', '.markdown')):
             return DocumentFormat.MD
-        elif filename_lower.endswith(('.html', '.htm')):
-            return DocumentFormat.HTML
         elif filename_lower.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg')):
             return DocumentFormat.IMAGE
         elif filename_lower.endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv')):
             return DocumentFormat.VIDEO
         elif filename_lower.endswith(('.mp3', '.wav', '.flac', '.aac')):
             return DocumentFormat.AUDIO
-        elif filename_lower.endswith(('.xlsx', '.xls', '.csv')):
-            return DocumentFormat.SPREADSHEET
-        elif filename_lower.endswith(('.pptx', '.ppt')):
-            return DocumentFormat.PRESENTATION
         elif filename_lower.endswith(('.py', '.js', '.java', '.cpp', '.c', '.go', '.rs', '.rb')):
             return DocumentFormat.CODE
         
-        # Check by content type
-        if 'pdf' in content_type:
-            return DocumentFormat.PDF
-        elif 'word' in content_type or 'document' in content_type:
-            return DocumentFormat.DOCX
-        elif 'text' in content_type:
-            return DocumentFormat.TXT
-        elif 'image' in content_type:
-            return DocumentFormat.IMAGE
-        elif 'video' in content_type:
-            return DocumentFormat.VIDEO
-        elif 'audio' in content_type:
-            return DocumentFormat.AUDIO
-        elif 'spreadsheet' in content_type or 'excel' in content_type:
-            return DocumentFormat.SPREADSHEET
-        elif 'presentation' in content_type or 'powerpoint' in content_type:
-            return DocumentFormat.PRESENTATION
-        
         return DocumentFormat.UNKNOWN
-    
-    @classmethod
-    async def _search_slack_files(cls, query: str, date_range: tuple, session_factories: Dict[str, Any]) -> List['Document']:
-        """Search Slack files (implementation depends on SlackFile model)."""
-        return []
-    
-    @classmethod
-    async def _search_uploaded_documents(cls, query: str, date_range: tuple, session_factories: Dict[str, Any]) -> List['Document']:
-        """Search uploaded documents (implementation depends on Document model)."""
-        return []
-    
-    @classmethod
-    async def _search_email_attachments(cls, query: str, date_range: tuple, session_factories: Dict[str, Any]) -> List['Document']:
-        """Search email attachments (implementation depends on email data)."""
-        return []
     
     # Business Logic Properties
     @property
     def title(self) -> str:
         """Get document title."""
         return self.identity.title
+    
+    @property
+    def file_id(self) -> str:
+        """Get file ID."""
+        return self.identity.file_id
+    
+    @property
+    def source(self) -> DocumentSource:
+        """Get document source."""
+        return self.identity.source
     
     @property
     def size_mb(self) -> Optional[float]:
@@ -323,60 +482,48 @@ class Document:
         return None
     
     @property
-    def age_days(self) -> Optional[int]:
-        """Get document age in days."""
-        if self.identity.created_date:
-            return (datetime.utcnow() - self.identity.created_date).days
-        return None
+    def is_google_native(self) -> bool:
+        """Check if this is a native Google document (Docs, Sheets, Slides)"""
+        return self.identity.format in [
+            DocumentFormat.GOOGLE_DOC, 
+            DocumentFormat.GOOGLE_SHEET, 
+            DocumentFormat.GOOGLE_SLIDE
+        ]
     
     @property
-    def is_recent(self) -> bool:
-        """Check if document was created recently (within 7 days)."""
-        return self.age_days is not None and self.age_days <= 7
-    
-    @property
-    def is_large(self) -> bool:
-        """Check if document is large (>10MB)."""
-        return self.size_mb is not None and self.size_mb > 10
+    def is_slack_file(self) -> bool:
+        """Check if this is a Slack file"""
+        return self.identity.source == DocumentSource.SLACK
     
     @property
     def is_text_based(self) -> bool:
-        """Check if document contains extractable text."""
+        """Check if document contains readable text."""
         return self.identity.format in [
-            DocumentFormat.PDF, DocumentFormat.DOCX, DocumentFormat.TXT,
-            DocumentFormat.MD, DocumentFormat.HTML, DocumentFormat.CODE
+            DocumentFormat.GOOGLE_DOC, DocumentFormat.GOOGLE_SHEET,
+            DocumentFormat.PDF, DocumentFormat.DOCX, DocumentFormat.TXT, DocumentFormat.MD
         ]
     
+    @property
+    def content(self) -> str:
+        """Get document content."""
+        return self._content or ""
+    
+    @property
+    def is_public(self) -> bool:
+        """Check if document is publicly accessible."""
+        return self._is_public
+    
+    @property
+    def permissions(self) -> List[Dict[str, Any]]:
+        """Get document permissions."""
+        return self._permissions.copy()
+    
+    @property
+    def slack_metadata(self) -> Dict[str, Any]:
+        """Get Slack-specific metadata."""
+        return self._slack_metadata.copy()
+    
     # Business Logic Methods
-    async def extract_content(self) -> Optional[str]:
-        """Extract text content from the document."""
-        if self._content:
-            return self._content
-        
-        if not self.is_text_based:
-            return None
-        
-        # This would implement content extraction based on document type
-        # For now, return placeholder
-        if self.identity.format == DocumentFormat.TXT:
-            # Would read text file content
-            pass
-        elif self.identity.format == DocumentFormat.PDF:
-            # Would use PDF extraction library
-            pass
-        elif self.identity.format == DocumentFormat.DOCX:
-            # Would use DOCX extraction library
-            pass
-        
-        return None
-    
-    def calculate_content_hash(self, content: str = None) -> str:
-        """Calculate hash of document content for deduplication."""
-        if content is None:
-            content = self._content or ""
-        
-        return hashlib.sha256(content.encode()).hexdigest()
-    
     def add_related_conversation(self, conversation_id: str):
         """Add a conversation that references this document."""
         if conversation_id not in self._related_conversations:
@@ -387,103 +534,76 @@ class Document:
         if user_id not in self._related_users:
             self._related_users.append(user_id)
     
-    def is_related_to_conversation(self, conversation_id: str) -> bool:
-        """Check if document is related to a specific conversation."""
-        return conversation_id in self._related_conversations
-    
-    def is_related_to_user(self, user_id: str) -> bool:
-        """Check if document is related to a specific user."""
-        return user_id in self._related_users
-    
     def get_sharing_context(self) -> Dict[str, Any]:
-        """Get context about how/where this document was shared."""
+        """Get context about document sharing and access."""
         context = {
-            'source': self.identity.document_type.value,
+            'source': self.identity.source.value,
+            'is_public': self._is_public,
             'related_conversations': len(self._related_conversations),
             'related_users': len(self._related_users),
-            'is_public': self._metadata.get('is_public', False)
+            'web_link': self.identity.web_link
         }
         
-        if self._loaded_source == 'slack':
+        if self.is_slack_file:
             context['slack'] = {
-                'channel_id': self._metadata.get('channel_id'),
-                'comments_count': self._metadata.get('comments_count', 0)
+                'channel_id': self.identity.channel_id,
+                'user_id': self.identity.user_id,
+                'channels': self._slack_metadata.get('channels', []),
+                'comments_count': self._slack_metadata.get('comments_count', 0),
+                'is_external': self._slack_metadata.get('is_external', False)
             }
-        elif self._loaded_source == 'email':
-            context['email'] = {
-                'subject': self._metadata.get('email_subject'),
-                'recipients_count': len(self._metadata.get('recipients', []))
+        else:
+            context['google_drive'] = {
+                'permissions_count': len(self._permissions),
+                'mime_type': self.identity.mime_type
             }
         
         return context
     
-    # Data Access
-    def get_slack_file(self) -> Optional[Any]:
-        """Get the underlying Slack file data object."""
-        return self._slack_file
-    
-    def get_insightmesh_document(self) -> Optional[Any]:
-        """Get the underlying InsightMesh document data object."""
-        return self._insightmesh_document
-    
-    def get_email_attachment(self) -> Optional[Dict[str, Any]]:
-        """Get the underlying email attachment data."""
-        return self._email_attachment
-    
-    def get_source_data(self) -> Optional[Any]:
-        """Get the underlying source data object."""
-        if self._loaded_source == 'slack':
-            return self._slack_file
-        elif self._loaded_source == 'insightmesh':
-            return self._insightmesh_document
-        elif self._loaded_source == 'email':
-            return self._email_attachment
-        return None
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """Get document metadata."""
-        return self._metadata.copy()
-    
-    def get_related_conversations(self) -> List[str]:
-        """Get list of related conversation IDs."""
-        return self._related_conversations.copy()
-    
-    def get_related_users(self) -> List[str]:
-        """Get list of related user IDs."""
-        return self._related_users.copy()
-    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
         return {
-            'identity': {
-                'id': self.identity.primary_id,
-                'title': self.identity.title,
-                'type': self.identity.document_type.value,
-                'format': self.identity.format.value,
-                'source_id': self.identity.source_id,
-                'url': self.identity.url,
-                'file_path': self.identity.file_path
-            },
-            'properties': {
-                'size_mb': self.size_mb,
-                'age_days': self.age_days,
-                'is_recent': self.is_recent,
-                'is_large': self.is_large,
-                'is_text_based': self.is_text_based,
-                'content_hash': self.identity.content_hash
-            },
-            'relationships': {
-                'related_conversations': len(self._related_conversations),
-                'related_users': len(self._related_users)
-            },
-            'dates': {
-                'created': self.identity.created_date.isoformat() if self.identity.created_date else None,
-                'modified': self.identity.modified_date.isoformat() if self.identity.modified_date else None
-            },
-            'sharing_context': self.get_sharing_context(),
-            'source': self._loaded_source
+            'file_id': self.identity.file_id,
+            'title': self.identity.title,
+            'source': self.identity.source.value,
+            'format': self.identity.format.value,
+            'mime_type': self.identity.mime_type,
+            'web_link': self.identity.web_link,
+            'size_mb': self.size_mb,
+            'is_google_native': self.is_google_native,
+            'is_slack_file': self.is_slack_file,
+            'is_text_based': self.is_text_based,
+            'is_public': self._is_public,
+            'created_date': self.identity.created_date,
+            'modified_date': self.identity.modified_date,
+            'channel_id': self.identity.channel_id,
+            'user_id': self.identity.user_id,
+            'sharing_context': self.get_sharing_context()
         }
     
     def __repr__(self) -> str:
         size_info = f", {self.size_mb}MB" if self.size_mb else ""
-        return f"Document(id='{self.identity.primary_id}', title='{self.identity.title}', type='{self.identity.document_type.value}'{size_info})" 
+        return f"Document(file_id='{self.identity.file_id}', title='{self.identity.title}', source='{self.identity.source.value}', format='{self.identity.format.value}'{size_info})"
+
+
+# Convenience functions for common operations
+async def search_google_docs(query: str, limit: int = 20) -> List[Document]:
+    """Search for Google Docs specifically"""
+    docs = await Document.search_by_content(query, limit, sources=[DocumentSource.GOOGLE_DRIVE])
+    return [doc for doc in docs if doc.identity.format == DocumentFormat.GOOGLE_DOC]
+
+async def search_slack_files(query: str, limit: int = 20) -> List[Document]:
+    """Search for Slack files specifically"""
+    return await Document.search_by_content(query, limit, sources=[DocumentSource.SLACK])
+
+async def get_recent_google_drive_activity(days: int = 7) -> List[Document]:
+    """Get recent Google Drive document activity"""
+    return await Document.list_recent_documents(days, sources=[DocumentSource.GOOGLE_DRIVE])
+
+async def get_recent_slack_files(days: int = 7) -> List[Document]:
+    """Get recent Slack file activity"""
+    return await Document.list_recent_documents(days, sources=[DocumentSource.SLACK])
+
+async def get_recent_document_activity(days: int = 7) -> List[Document]:
+    """Get recent document activity from both sources"""
+    return await Document.list_recent_documents(days) 
