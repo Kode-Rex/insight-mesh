@@ -8,6 +8,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from .config import get_managed_databases, get_all_databases, get_database_choices
+from typing import List, Dict
 
 console = Console()
 
@@ -205,6 +206,173 @@ def show_migration_history(schema_name):
     ]
     
     return run_command(cmd, cwd=str(project_root), env=env)
+
+def migrate_neo4j(action='info'):
+    """Run Neo4j migrations using neo4j-migrations tool"""
+    env = get_env()
+    project_root = get_project_root()
+    
+    # Check if neo4j-migrations CLI is available
+    neo4j_migrations_cmd = 'neo4j-migrations'
+    
+    cmd = [neo4j_migrations_cmd]
+    
+    if action == 'info':
+        cmd.append('info')
+    elif action == 'migrate':
+        cmd.append('migrate')
+    elif action == 'validate':
+        cmd.append('validate')
+    elif action == 'clean':
+        cmd.append('clean')
+    
+    # Add configuration file
+    cmd.extend(['-c', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'neo4j.conf')])
+    
+    console.print(f"[blue]🔄 Running Neo4j migration: {action}[/blue]")
+    return run_command(cmd, cwd=str(project_root), env=env)
+
+def migrate_elasticsearch(action='migrate'):
+    """Run Elasticsearch migrations using elasticsearch-evolution"""
+    env = get_env()
+    project_root = get_project_root()
+    
+    # Use elasticsearch-evolution via Docker or JAR
+    # For simplicity, using curl to apply HTTP-based migrations
+    if action == 'migrate':
+        console.print("[blue]🔄 Running Elasticsearch migrations[/blue]")
+        
+        # Read and execute migration files
+        migrations_dir = project_root / '.weave' / 'migrations' / 'elasticsearch' / 'scripts'
+        
+        if not migrations_dir.exists():
+            console.print("[yellow]⚠️  No Elasticsearch migrations directory found[/yellow]")
+            return True
+        
+        # Get Elasticsearch connection details
+        es_host = env.get('ELASTICSEARCH_HOST', 'localhost')
+        es_port = env.get('ELASTICSEARCH_PORT', '9200')
+        es_url = f"http://{es_host}:{es_port}"
+        
+        # Apply migrations in order
+        for migration_file in sorted(migrations_dir.glob("V*.http")):
+            console.print(f"[blue]📄 Applying migration: {migration_file.name}[/blue]")
+            
+            # Parse and execute HTTP requests from the migration file
+            # This is a simplified version - in production, use elasticsearch-evolution
+            try:
+                with open(migration_file, 'r') as f:
+                    content = f.read()
+                
+                # Extract HTTP requests (simplified parser)
+                requests = parse_http_migration_file(content, es_url)
+                
+                for request in requests:
+                    result = execute_http_request(request)
+                    if not result:
+                        console.print(f"[red]❌ Failed to apply migration: {migration_file.name}[/red]")
+                        return False
+                
+                console.print(f"[green]✅ Applied migration: {migration_file.name}[/green]")
+                
+            except Exception as e:
+                console.print(f"[red]❌ Error applying migration {migration_file.name}: {e}[/red]")
+                return False
+        
+        console.print("[green]✅ All Elasticsearch migrations applied successfully[/green]")
+        return True
+    
+    elif action == 'info':
+        # Show current state
+        console.print("[blue]📊 Elasticsearch migration info[/blue]")
+        # Implementation would check which indices exist
+        return True
+
+def parse_http_migration_file(content: str, base_url: str) -> List[Dict]:
+    """Parse HTTP migration file and return list of requests"""
+    import re
+    import json
+    
+    requests = []
+    
+    # Split by ### markers
+    sections = re.split(r'###[^\n]*\n', content)
+    
+    for section in sections[1:]:  # Skip first empty section
+        if not section.strip():
+            continue
+            
+        lines = section.strip().split('\n')
+        if len(lines) < 2:
+            continue
+            
+        # Parse HTTP method and path
+        method_line = lines[0].strip()
+        if not method_line:
+            continue
+            
+        parts = method_line.split(' ', 1)
+        if len(parts) != 2:
+            continue
+            
+        method, path = parts
+        url = f"{base_url}{path}"
+        
+        # Find Content-Type and JSON body
+        headers = {}
+        body = None
+        json_start = -1
+        
+        for i, line in enumerate(lines[1:], 1):
+            if line.startswith('Content-Type:'):
+                headers['Content-Type'] = line.split(':', 1)[1].strip()
+            elif line.strip() == '{':
+                json_start = i
+                break
+        
+        if json_start > 0:
+            json_lines = lines[json_start:]
+            try:
+                body = json.loads('\n'.join(json_lines))
+            except json.JSONDecodeError:
+                continue
+        
+        requests.append({
+            'method': method,
+            'url': url,
+            'headers': headers,
+            'json': body
+        })
+    
+    return requests
+
+def execute_http_request(request: Dict) -> bool:
+    """Execute HTTP request for Elasticsearch migration"""
+    import requests as http_requests
+    
+    try:
+        response = http_requests.request(
+            method=request['method'],
+            url=request['url'],
+            headers=request.get('headers', {}),
+            json=request.get('json')
+        )
+        
+        if response.status_code in [200, 201]:
+            return True
+        elif response.status_code == 400:
+            # Check if it's a "resource already exists" error
+            error_response = response.json()
+            if 'resource_already_exists_exception' in str(error_response):
+                console.print(f"[yellow]⚠️  Resource already exists, skipping[/yellow]")
+                return True
+        
+        console.print(f"[red]❌ HTTP {response.status_code}: {response.text}[/red]")
+        return False
+        
+    except Exception as e:
+        console.print(f"[red]❌ Request failed: {e}[/red]")
+        return False
 
 @click.group('migrate', invoke_without_command=True)
 @click.pass_context

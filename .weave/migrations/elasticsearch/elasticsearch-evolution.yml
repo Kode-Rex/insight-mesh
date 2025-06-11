@@ -1,0 +1,22 @@
+# Elasticsearch Evolution Configuration
+# Using elasticsearch-evolution: https://github.com/senacor/elasticsearch-evolution
+
+elasticsearch:
+  host: ${ELASTICSEARCH_HOST:localhost}
+  port: ${ELASTICSEARCH_PORT:9200}
+  scheme: ${ELASTICSEARCH_SCHEME:http}
+  username: ${ELASTICSEARCH_USER:}
+  password: ${ELASTICSEARCH_PASSWORD:}
+
+evolution:
+  locations:
+    - filesystem:migrations/elasticsearch/scripts
+  enabled: true
+  baseline-on-migrate: true
+  validate-on-migrate: true
+  out-of-order: false
+  ignore-missing-migrations: false
+  
+logging:
+  level:
+    com.senacor.elasticsearch.evolution: INFO 
