@@ -47,7 +47,7 @@ logger.add(
 )
 
 # Create the FastMCP app
-mcp = FastMCP("InsightMesh MCP Server")
+mcp = FastMCP(name="InsightMesh MCP Server", version="1.0.0")
 
 # Helper function to validate token
 async def validate_token(token: str, token_type: str) -> UserInfo:
@@ -297,8 +297,6 @@ def system_info() -> str:
     """
 
 if __name__ == "__main__":
-    import uvicorn
-    
-    # Run the FastMCP app
-    logger.info(f"Starting FastMCP server on {settings.MCP_HOST}:{settings.MCP_PORT}...")
-    uvicorn.run(mcp.http_app(), host=settings.MCP_HOST, port=settings.MCP_PORT) 
+    # Use the modern FastMCP run method with streamable-http transport
+    logger.info(f"Starting FastMCP server with streamable-http on {settings.MCP_HOST}:{settings.MCP_PORT}...")
+    mcp.run(transport="sse", host=settings.MCP_HOST, port=settings.MCP_PORT) 

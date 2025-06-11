@@ -62,6 +62,9 @@ services:
       - OTEL_EXPORTER=in_memory
       - MCP_SERVER_URL=http://mcp:9091
       - MCP_API_KEY=${MCP_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - WEBCAT_API_KEY=${WEBCAT_API_KEY}
     volumes:
       - ./config/litellm_config.yaml:/app/config.yaml
       - ./rag_pipeline:/app/rag_pipeline
