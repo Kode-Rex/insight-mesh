@@ -21,6 +21,9 @@ def get_env():
     env.setdefault('POSTGRES_PASSWORD', 'postgres')
     env.setdefault('POSTGRES_HOST', 'localhost')
     env.setdefault('POSTGRES_PORT', '5432')
+    env.setdefault('NEO4J_URI', 'bolt://localhost:7687')
+    env.setdefault('NEO4J_USER', 'neo4j')
+    env.setdefault('NEO4J_PASSWORD', 'password')
     
     return env
 
@@ -32,6 +35,12 @@ def run_command(cmd, cwd=None, env=None):
         console.print(f"[red]Error:[/red] {result.stderr}")
         sys.exit(1)
     return result.stdout
+
+def run_command_safe(cmd, cwd=None, env=None):
+    """Run a shell command and return the full result object (for status checking)"""
+    console.print(f"[blue]Running:[/blue] {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+    return result
 
 def get_project_root():
     """Get the project root directory"""
@@ -397,7 +406,7 @@ def get_neo4j_migration_status() -> str:
     ]
     
     try:
-        result = run_command(cmd, cwd=str(project_root), env=env)
+        result = run_command_safe(cmd, cwd=str(project_root), env=env)
         if result and result.returncode == 0:
             # Parse the output to extract meaningful status
             output = result.stdout.strip() if result.stdout else ""
