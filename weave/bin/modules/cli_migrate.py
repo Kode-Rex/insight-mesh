@@ -374,6 +374,232 @@ def execute_http_request(request: Dict) -> bool:
         console.print(f"[red]❌ Request failed: {e}[/red]")
         return False
 
+def get_neo4j_migration_status() -> str:
+    """Get Neo4j migration status using neo4j-migrations info command"""
+    env = get_env()
+    project_root = get_project_root()
+    
+    # Check if neo4j-migrations CLI is available
+    neo4j_migrations_cmd = 'neo4j-migrations'
+    
+    cmd = [
+        neo4j_migrations_cmd, 'info',
+        '-c', str(project_root / '.weave' / 'migrations' / 'neo4j' / 'neo4j.conf')
+    ]
+    
+    try:
+        result = run_command(cmd, cwd=str(project_root), env=env)
+        if result:
+            # Parse the output to extract meaningful status
+            lines = result.strip().split('\n')
+            for line in lines:
+                if 'Applied migrations:' in line or 'Current version:' in line:
+                    return line.strip()
+            # If no specific status found, return a summary
+            return f"{len(lines)} migration entries"
+        return "No status available"
+    except Exception as e:
+        if "No such file or directory" in str(e):
+            return "[yellow]neo4j-migrations not installed (run: weave db install-tools)[/yellow]"
+        else:
+            return f"[red]Error: {str(e)}[/red]"
+
+def get_elasticsearch_migration_status() -> str:
+    """Get Elasticsearch migration status by checking indices"""
+    env = get_env()
+    
+    # Get Elasticsearch connection details
+    es_host = env.get('ELASTICSEARCH_HOST', 'localhost')
+    es_port = env.get('ELASTICSEARCH_PORT', '9200')
+    es_url = f"http://{es_host}:{es_port}"
+    
+    try:
+        import requests as http_requests
+        
+        # Check cluster health and indices
+        response = http_requests.get(f"{es_url}/_cat/indices?v&format=json", timeout=5)
+        if response.status_code == 200:
+            indices = response.json()
+            if indices:
+                return f"{len(indices)} indices created"
+            else:
+                return "No indices found"
+        else:
+            return f"[yellow]HTTP {response.status_code} - Elasticsearch not responding[/yellow]"
+    except ImportError:
+        return "[yellow]requests library not installed (run: weave db install-tools)[/yellow]"
+    except Exception as e:
+        if "Connection" in str(e) or "timeout" in str(e).lower():
+            return "[yellow]Elasticsearch not running or not accessible[/yellow]"
+        else:
+            return f"[red]Error: {str(e)}[/red]"
+
+def install_python_dependencies():
+    """Install Python dependencies for migrations"""
+    project_root = get_project_root()
+    requirements_file = project_root / 'requirements-migrations.txt'
+    
+    if not requirements_file.exists():
+        console.print(f"[red]❌ Requirements file not found: {requirements_file}[/red]")
+        return False
+    
+    console.print("[blue]📦 Installing Python migration dependencies...[/blue]")
+    
+    try:
+        cmd = [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            console.print("[green]✅ Python dependencies installed successfully[/green]")
+            return True
+        else:
+            console.print(f"[red]❌ Failed to install Python dependencies: {result.stderr}[/red]")
+            return False
+    except Exception as e:
+        console.print(f"[red]❌ Error installing Python dependencies: {e}[/red]")
+        return False
+
+def install_neo4j_migrations():
+    """Install neo4j-migrations CLI tool"""
+    console.print("[blue]📦 Installing neo4j-migrations CLI tool...[/blue]")
+    
+    # Check if Java is available, if not try to install OpenJDK
+    java_available = False
+    try:
+        # Java -version outputs to stderr, not stdout
+        java_result = subprocess.run(['java', '-version'], capture_output=True, text=True)
+        if java_result.returncode == 0:
+            version_info = java_result.stderr.split()[2] if java_result.stderr else 'version unknown'
+            console.print(f"[green]✅ Java detected: {version_info}[/green]")
+            java_available = True
+    except FileNotFoundError:
+        pass
+    
+    if not java_available:
+        console.print("[yellow]⚠️  Java not found. Attempting to install OpenJDK...[/yellow]")
+        
+        # Try to install OpenJDK via Homebrew (macOS)
+        try:
+            brew_check = subprocess.run(['brew', '--version'], capture_output=True, text=True)
+            if brew_check.returncode == 0:
+                console.print("[blue]📦 Installing OpenJDK via Homebrew...[/blue]")
+                install_result = subprocess.run(['brew', 'install', 'openjdk'], capture_output=True, text=True)
+                
+                if install_result.returncode == 0:
+                    console.print("[green]✅ OpenJDK installed successfully![/green]")
+                    
+                    # Verify Java is now available
+                    java_verify = subprocess.run(['java', '-version'], capture_output=True, text=True)
+                    if java_verify.returncode == 0:
+                        java_available = True
+                        version_info = java_verify.stderr.split()[2] if java_verify.stderr else 'version unknown'
+                        console.print(f"[green]✅ Java now available: {version_info}[/green]")
+                    else:
+                        console.print("[yellow]⚠️  OpenJDK installed but may need PATH configuration[/yellow]")
+                        console.print("[blue]💡 Try: export PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\"[/blue]")
+                else:
+                    console.print(f"[yellow]⚠️  Failed to install OpenJDK via Homebrew: {install_result.stderr}[/yellow]")
+        except FileNotFoundError:
+            pass
+    
+    if not java_available:
+        console.print("[red]❌ Java/OpenJDK is required for neo4j-migrations.[/red]")
+        console.print("[blue]📖 Installation options:[/blue]")
+        console.print("  1. Homebrew (macOS): brew install openjdk")
+        console.print("  2. SDKMAN: sdk install java")
+        console.print("  3. Download from: https://adoptium.net/")
+        console.print("  4. Use Docker alternative: docker run --rm neo4j/neo4j-migrations")
+        return False
+    
+    # Try to install via different methods
+    install_methods = [
+        {
+            'name': 'Homebrew (macOS)',
+            'check': ['brew', '--version'],
+            'install': ['brew', 'install', 'neo4j-migrations']
+        },
+        {
+            'name': 'SDKMAN',
+            'check': ['sdk', 'version'],
+            'install': ['sdk', 'install', 'neo4j-migrations']
+        }
+    ]
+    
+    for method in install_methods:
+        try:
+            # Check if the package manager is available
+            check_result = subprocess.run(method['check'], capture_output=True, text=True)
+            if check_result.returncode == 0:
+                console.print(f"[blue]📦 Installing via {method['name']}...[/blue]")
+                
+                install_result = subprocess.run(method['install'], capture_output=True, text=True)
+                if install_result.returncode == 0:
+                    console.print(f"[green]✅ neo4j-migrations installed via {method['name']}[/green]")
+                    return True
+                else:
+                    console.print(f"[yellow]⚠️  Failed to install via {method['name']}: {install_result.stderr}[/yellow]")
+        except FileNotFoundError:
+            continue
+    
+    # If all methods fail, provide manual installation instructions
+    console.print("[yellow]⚠️  Automatic installation failed. Manual installation required:[/yellow]")
+    console.print("[blue]📖 Installation options:[/blue]")
+    console.print("  1. Homebrew (macOS): brew install neo4j-migrations")
+    console.print("  2. SDKMAN: sdk install neo4j-migrations")
+    console.print("  3. Download JAR: https://github.com/michael-simons/neo4j-migrations/releases")
+    console.print("  4. Docker: Use the migration Docker image")
+    
+    return False
+
+def check_and_install_tools():
+    """Check for required tools and offer to install them"""
+    console.print("[blue]🔍 Checking migration tools...[/blue]")
+    
+    tools_status = {
+        'python_deps': False,
+        'neo4j_migrations': False
+    }
+    
+    # Check Python dependencies
+    try:
+        import requests
+        tools_status['python_deps'] = True
+        console.print("[green]✅ Python dependencies available[/green]")
+    except ImportError:
+        console.print("[yellow]⚠️  Python dependencies missing[/yellow]")
+    
+    # Check neo4j-migrations
+    try:
+        result = subprocess.run(['neo4j-migrations', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            tools_status['neo4j_migrations'] = True
+            console.print("[green]✅ neo4j-migrations available[/green]")
+    except FileNotFoundError:
+        console.print("[yellow]⚠️  neo4j-migrations not found[/yellow]")
+    
+    # Offer to install missing tools
+    missing_tools = [k for k, v in tools_status.items() if not v]
+    
+    if missing_tools:
+        console.print(f"\n[yellow]📦 Missing tools: {', '.join(missing_tools)}[/yellow]")
+        
+        if click.confirm("Would you like to install the missing tools?"):
+            success = True
+            
+            if not tools_status['python_deps']:
+                success &= install_python_dependencies()
+            
+            if not tools_status['neo4j_migrations']:
+                success &= install_neo4j_migrations()
+            
+            return success
+        else:
+            console.print("[blue]ℹ️  You can install tools later with: weave db install-tools[/blue]")
+            return False
+    else:
+        console.print("[green]🎉 All migration tools are available![/green]")
+        return True
+
 @click.group('migrate', invoke_without_command=True)
 @click.pass_context
 def migrate_group(ctx):
@@ -540,27 +766,73 @@ def migrate_status(ctx, database):
     
     try:
         if database == 'all':
+            from .config import (get_managed_databases, get_database_type, 
+                               get_database_migration_tool)
+            
             table = Table(title="Database Migration Status")
             table.add_column("Database", style="cyan", no_wrap=True)
-            table.add_column("Current Revision", style="green")
+            table.add_column("Type", style="blue")
+            table.add_column("Tool", style="yellow")
+            table.add_column("Status", style="green")
             
             for db in get_managed_databases():
                 try:
-                    revision = show_current_revision(db).strip()
-                    if not revision:
-                        revision = "[yellow]No migrations applied[/yellow]"
-                    table.add_row(db, revision)
+                    db_type = get_database_type(db)
+                    migration_tool = get_database_migration_tool(db)
+                    
+                    if db_type == 'sql':
+                        # Use Alembic for SQL databases
+                        revision = show_current_revision(db).strip()
+                        status = revision if revision else "[yellow]No migrations applied[/yellow]"
+                    elif db_type == 'graph':
+                        # Get Neo4j migration status
+                        neo4j_status = get_neo4j_migration_status()
+                        status = neo4j_status if neo4j_status else "[yellow]No migrations applied[/yellow]"
+                    elif db_type == 'search':
+                        # Get Elasticsearch migration status
+                        es_status = get_elasticsearch_migration_status()
+                        status = es_status if es_status else "[yellow]No migrations applied[/yellow]"
+                    else:
+                        status = "[red]Unknown database type[/red]"
+                    
+                    table.add_row(db, db_type or "unknown", migration_tool or "none", status)
                 except Exception as e:
-                    table.add_row(db, f"[red]Error: {str(e)}[/red]")
+                    table.add_row(db, "error", "error", f"[red]Error: {str(e)}[/red]")
             
             console.print(table)
         else:
-            console.print(f"[bold blue]{database} schema status:[/bold blue]")
-            revision = show_current_revision(database)
-            if revision.strip():
-                console.print(f"[green]Current revision: {revision.strip()}[/green]")
+            from .config import get_database_type, get_database_migration_tool
+            
+            db_type = get_database_type(database)
+            migration_tool = get_database_migration_tool(database)
+            
+            console.print(f"[bold blue]{database} database status:[/bold blue]")
+            console.print(f"[blue]Type: {db_type}[/blue]")
+            console.print(f"[blue]Migration Tool: {migration_tool}[/blue]")
+            
+            if db_type == 'sql':
+                # Use Alembic for SQL databases
+                revision = show_current_revision(database)
+                if revision.strip():
+                    console.print(f"[green]Current revision: {revision.strip()}[/green]")
+                else:
+                    console.print("[yellow]No migrations applied[/yellow]")
+            elif db_type == 'graph':
+                # Get Neo4j migration status
+                neo4j_status = get_neo4j_migration_status()
+                if neo4j_status:
+                    console.print(f"Status: {neo4j_status}")
+                else:
+                    console.print("[yellow]No migrations applied[/yellow]")
+            elif db_type == 'search':
+                # Get Elasticsearch migration status
+                es_status = get_elasticsearch_migration_status()
+                if es_status:
+                    console.print(f"Status: {es_status}")
+                else:
+                    console.print("[yellow]No migrations applied[/yellow]")
             else:
-                console.print("[yellow]No migrations applied[/yellow]")
+                console.print(f"[red]Unknown database type: {db_type}[/red]")
                 
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user[/yellow]")
