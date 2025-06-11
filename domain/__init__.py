@@ -1,33 +1,12 @@
 """
-Domain models for the Insight Mesh project.
-Contains all shared database models used across services.
+Domain models for InsightMesh.
+
+This module contains the core domain models that represent the business logic
+and relationships between entities in the system.
 """
 
-# Import all InsightMesh models
-from .insightmesh import (
-    InsightMeshBase,
-    InsightMeshUser,
-    Context,
-    Conversation,
-    Message
-)
+from .person import Person
+from .channels import Channel
+from .messages import Message
 
-# Import all Slack models  
-from .slack import (
-    SlackBase,
-    SlackUser,
-    SlackChannel
-)
-
-__all__ = [
-    # InsightMesh models
-    'InsightMeshBase',
-    'InsightMeshUser',
-    'Context', 
-    'Conversation',
-    'Message',
-    # Slack models
-    'SlackBase',
-    'SlackUser',
-    'SlackChannel'
-] 
+__all__ = ['Person', 'Channel', 'Message'] 

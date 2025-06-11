@@ -8,7 +8,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
 # Import the InsightMeshBase metadata for insightmesh schema
-from domain.insightmesh import InsightMeshBase
+from domain.data.insightmesh import InsightMeshBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -5,8 +5,8 @@ from typing import Optional, List
 import os
 from datetime import datetime
 
-# Import domain models instead of defining our own
-from domain import (
+# Import data objects instead of defining our own
+from domain.data import (
     InsightMeshBase, SlackBase,
     InsightMeshUser, Context, Conversation, Message,
     SlackUser, SlackChannel
