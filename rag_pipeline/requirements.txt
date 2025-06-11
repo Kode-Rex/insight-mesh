@@ -5,4 +5,5 @@ logging>=0.4.9
 orjson>=3.9.7  # Required by litellm proxy
 pytest-asyncio>=1.0.0  # For async tests
 mcp>=1.5.0  # For compatibility with fastmcp
+fastmcp>=2.3.0  # FastMCP client for streamable-http
 backoff>=2.2.1  # Required by litellm proxy 

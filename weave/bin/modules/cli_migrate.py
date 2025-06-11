@@ -910,13 +910,11 @@ def migrate_status(ctx, database):
             table = Table(title="Database Migration Status")
             table.add_column("Database", style="cyan", no_wrap=True)
             table.add_column("Type", style="blue")
-            table.add_column("Tool", style="yellow")
             table.add_column("Status", style="green")
             
             for db in get_managed_databases():
                 try:
                     db_type = get_database_type(db)
-                    migration_tool = get_database_migration_tool(db)
                     
                     if db_type == 'sql':
                         # Use Alembic for SQL databases
@@ -933,20 +931,18 @@ def migrate_status(ctx, database):
                     else:
                         status = "[red]Unknown database type[/red]"
                     
-                    table.add_row(db, db_type or "unknown", migration_tool or "none", status)
+                    table.add_row(db, db_type or "unknown", status)
                 except Exception as e:
-                    table.add_row(db, "error", "error", f"[red]Error: {str(e)}[/red]")
+                    table.add_row(db, "error", f"[red]Error: {str(e)}[/red]")
             
             console.print(table)
         else:
-            from .config import get_database_type, get_database_migration_tool
+            from .config import get_database_type
             
             db_type = get_database_type(database)
-            migration_tool = get_database_migration_tool(database)
             
             console.print(f"[bold blue]{database} database status:[/bold blue]")
             console.print(f"[blue]Type: {db_type}[/blue]")
-            console.print(f"[blue]Migration Tool: {migration_tool}[/blue]")
             
             if db_type == 'sql':
                 # Use Alembic for SQL databases

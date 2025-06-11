@@ -1,0 +1,43 @@
+agent: customer-support
+description: "Resolve customer issues using conversation history and available tools"
+
+# Domain-driven context
+domain: person
+context: messages
+goal: |
+  Help customers resolve issues by:
+  1. Understanding their problem from conversation history
+  2. Searching for solutions using available tools
+  3. Providing clear, actionable responses
+
+# Tool access (inherited from domain context)
+tools:
+  - slack
+  - webcat
+  - notion
+
+# Execution configuration
+execution:
+  timeout: 300
+  retry: 3
+  cache: true
+  memory_limit: "512Mi"
+  
+# Observability
+observability:
+  trace: true
+  metrics: true
+  logs: "info"
+  
+# Triggers
+triggers:
+  - type: "slack_mention"
+    pattern: "@support"
+  - type: "webhook"
+    path: "/agents/customer-support"
+    
+# Environment
+environment:
+  MODEL: "gpt-4o-mini"
+  MAX_TOKENS: 2000
+  TEMPERATURE: 0.7 

@@ -42,7 +42,7 @@ import aiohttp
 import asyncio
 
 # MCP Server configuration
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:8000")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/mcp/")
 MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "30"))  # Timeout in seconds
 MCP_MAX_RETRIES = int(os.environ.get("MCP_MAX_RETRIES", "3"))
@@ -56,51 +56,59 @@ async def get_context_from_mcp(
     history_summary: str,
     session: Optional[aiohttp.ClientSession] = None
 ) -> Optional[Dict[str, Any]]:
-    """Get context from MCP server"""
-    if not api_key or not auth_token or not prompt:
+    """Get context from MCP server using FastMCP client"""
+    if not auth_token or not prompt:
         return None
-        
-    close_session = False
-    if session is None:
-        session = aiohttp.ClientSession()
-        close_session = True
     
     try:
-        # Use the legacy REST API endpoint directly
-        headers = {
-            "x-api-key": api_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+        from fastmcp import Client
         
-        payload = {
-            "auth_token": auth_token,
-            "token_type": token_type,
-            "prompt": prompt,
-            "history_summary": history_summary
-        }
-        
-        logger.info(f"Calling MCP context endpoint: {MCP_SERVER_URL}/context")
-        async with session.post(
-            f"{MCP_SERVER_URL}/context",
-            headers=headers,
-            json=payload,
-            timeout=MCP_TIMEOUT
-        ) as response:
-            if response.status == 200:
-                result = await response.json()
-                logger.info(f"Successfully retrieved context from MCP server")
-                return result
+        # Ensure the URL ends with /mcp/ for the FastMCP client
+        mcp_url = MCP_SERVER_URL
+        if not mcp_url.endswith('/mcp/'):
+            if mcp_url.endswith('/mcp'):
+                mcp_url += '/'
+            elif mcp_url.endswith('/'):
+                mcp_url += 'mcp/'
             else:
-                error_text = await response.text()
-                logger.error(f"MCP server error: {response.status} - {error_text}")
+                mcp_url += '/mcp/'
+        
+        # Use the FastMCP client which handles all the protocol details
+        logger.info(f"Calling MCP server with FastMCP client at: {mcp_url}")
+        
+        # Create the MCP client - exactly like the working test
+        client = Client(mcp_url)
+        
+        # Call the get_context tool - exactly like the working test
+        async with client:
+            result = await client.call_tool("get_context", {
+                "auth_token": auth_token,
+                "token_type": token_type,
+                "prompt": prompt,
+                "history_summary": history_summary or ""
+            })
+            
+            logger.info(f"MCP response received: {len(str(result))} chars")
+            
+            # The result from call_tool is already parsed - it's a list of TextContent objects
+            if result and len(result) > 0:
+                # Extract the text content from the first result
+                text_content = result[0].text if hasattr(result[0], 'text') else str(result[0])
+                try:
+                    # Parse the JSON response
+                    import json
+                    parsed_result = json.loads(text_content)
+                    return parsed_result
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse MCP response as JSON: {text_content[:200]}...")
+                    return None
+            else:
+                logger.warning("Empty result from MCP server")
                 return None
+        
     except Exception as e:
-        logger.error(f"Error calling MCP server: {e}")
+        logger.error(f"Error calling MCP server: {str(e)}")
         return None
-    finally:
-        if close_session:
-            await session.close()
 
 def summarize_conversation_history(messages: List[Dict[str, str]]) -> str:
     """Create a summary of the conversation history"""
@@ -136,16 +144,16 @@ class RAGHandler(CustomLogger):
         user_api_key_dict: UserAPIKeyAuth,
         cache: DualCache,
         data: dict,
-        call_type: Literal["completion", "text_completion", "embeddings", "image_generation", "moderation", "audio_transcription"]
+        call_type: Literal["completion", "acompletion", "text_completion", "embeddings", "image_generation", "moderation", "audio_transcription"]
     ):
         logger.info("=== RAG HANDLER ENTRY POINT ===")
         logger.info(f"Call type: {call_type}")
         logger.info(f"Data keys: {list(data.keys())}")
         
         try:
-            # Only process completion requests
-            if call_type != "completion":
-                logger.info("Skipping non-completion request")
+            # Only process completion requests (both sync and async)
+            if call_type not in ["completion", "acompletion"]:
+                logger.info(f"Skipping non-completion request: {call_type}")
                 return data
 
             # Get the messages from the request

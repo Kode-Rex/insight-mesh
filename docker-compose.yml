@@ -52,7 +52,9 @@ services:
 
   # LiteLLM Proxy service
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    build:
+      context: ./config/litellm
+      dockerfile: Dockerfile
     ports:
       - "4000:4000"
     environment:
@@ -60,8 +62,14 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_LOG=INFO
       - OTEL_EXPORTER=in_memory
+      - MCP_SERVER_URL=http://mcp:9091
+      - MCP_API_KEY=${MCP_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - WEBCAT_API_KEY=${WEBCAT_API_KEY}
     volumes:
       - ./config/litellm_config.yaml:/app/config.yaml
+      - ./rag_pipeline:/app/rag_pipeline
     command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "8"]
     depends_on:
       postgres:
@@ -168,7 +176,6 @@ services:
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
-      - ./config/neo4j/plugins:/plugins
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
       interval: 30s

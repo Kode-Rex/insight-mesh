@@ -1,6 +1,19 @@
 {
     "project_name": "insight-mesh",
     "description": "Delivering AI solutions directly into enterprise workflows—no extra tabs required.",
+    "agents": {
+        "runtime": "container",
+        "execution": {
+            "engine": "dagger",
+            "timeout": 300,
+            "retry": 3,
+            "cache": true
+        }
+    },
+    "infrastructure": {
+        "container_runtime": "dagger",
+        "orchestration": "docker-compose"
+    },
     "mcp": {
         "config_path": ".weave/mcp.json",
         "description": "MCP Servers you can install as tools",
