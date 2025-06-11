@@ -8,6 +8,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from .config import get_managed_databases, get_all_databases, get_database_choices
+from .annotation_migration_detector import AnnotationMigrationDetector, generate_migration_files
 from typing import List, Dict
 
 console = Console()
@@ -175,6 +176,62 @@ def create_migration_autogenerate(schema_name, message):
     ]
     
     return run_command(cmd, cwd=str(project_root), env=env)
+
+def detect_and_create_annotation_migrations(message):
+    """Detect annotation changes and create migrations for Neo4j and Elasticsearch"""
+    project_root = get_project_root()
+    detector = AnnotationMigrationDetector(project_root)
+    
+    console.print("[blue]🔍 Detecting annotation changes...[/blue]")
+    changes = detector.detect_changes()
+    
+    if not changes:
+        console.print("[green]✅ No annotation changes detected[/green]")
+        return []
+    
+    console.print(f"[yellow]📋 Found {len(changes)} annotation changes:[/yellow]")
+    for change in changes:
+        console.print(f"  - {change.change_type.title()} {change.store_type} for {change.model_name}")
+    
+    # Generate migration files
+    migration_files = generate_migration_files(changes, project_root, message)
+    created_files = []
+    
+    # Write Neo4j migration
+    if 'neo4j' in migration_files:
+        neo4j_dir = project_root / '.weave' / 'migrations' / 'neo4j' / 'versions'
+        neo4j_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filename with timestamp
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"neo4j_{timestamp}_{message.lower().replace(' ', '_')}.py"
+        
+        neo4j_file = neo4j_dir / filename
+        with open(neo4j_file, 'w') as f:
+            f.write(migration_files['neo4j'])
+        
+        console.print(f"[green]✅ Created Neo4j migration: {filename}[/green]")
+        created_files.append(str(neo4j_file))
+    
+    # Write Elasticsearch migration
+    if 'elasticsearch' in migration_files:
+        es_dir = project_root / '.weave' / 'migrations' / 'elasticsearch' / 'versions'
+        es_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filename with timestamp
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"es_{timestamp}_{message.lower().replace(' ', '_')}.py"
+        
+        es_file = es_dir / filename
+        with open(es_file, 'w') as f:
+            f.write(migration_files['elasticsearch'])
+        
+        console.print(f"[green]✅ Created Elasticsearch migration: {filename}[/green]")
+        created_files.append(str(es_file))
+    
+    return created_files
 
 def show_current_revision(schema_name):
     """Show current revision for a schema"""
@@ -844,7 +901,7 @@ def migrate_down(ctx, database, revision):
 @migrate_group.command('create')
 @click.argument('database', type=click.Choice(get_managed_databases()))
 @click.argument('message')
-@click.option('--autogenerate', '-a', is_flag=True, help='Auto-detect model changes')
+@click.option('--autogenerate', '-a', is_flag=True, help='Auto-detect model and annotation changes')
 @click.pass_context
 def migrate_create(ctx, database, message, autogenerate):
     """Create a new migration
@@ -854,7 +911,7 @@ def migrate_create(ctx, database, message, autogenerate):
     Create MCP migration:
     weave migrate create mcp "add user preferences table"
     
-    Auto-generate migration based on model changes:
+    Auto-generate migration based on model and annotation changes:
     weave migrate create mcp "auto detected changes" --autogenerate
     
     Create Slack migration:
@@ -868,12 +925,22 @@ def migrate_create(ctx, database, message, autogenerate):
     try:
         if autogenerate:
             console.print(f"[bold blue]Creating auto-generated migration for {database} schema[/bold blue]")
+            
+            # First, detect annotation changes and create migrations for Neo4j/Elasticsearch
+            annotation_files = detect_and_create_annotation_migrations(message)
+            
+            # Then create the SQLAlchemy migration
             result = create_migration_autogenerate(database, message)
+            
+            console.print(f"[green]✅ SQLAlchemy migration created successfully[/green]")
+            
+            if annotation_files:
+                console.print(f"[green]✅ Also created {len(annotation_files)} annotation migrations[/green]")
+                console.print("[blue]💡 Run 'weave migrate up' to apply all migrations[/blue]")
         else:
             console.print(f"[bold blue]Creating new migration for {database} schema[/bold blue]")
             result = create_migration(database, message)
-            
-        console.print(f"[green]✅ Migration created successfully[/green]")
+            console.print(f"[green]✅ Migration created successfully[/green]")
         
         if verbose and result:
             console.print(f"[blue]Output:[/blue] {result}")
