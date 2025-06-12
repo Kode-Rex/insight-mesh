@@ -42,7 +42,7 @@ import aiohttp
 import asyncio
 
 # MCP Server configuration
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/mcp/")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
 MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "30"))  # Timeout in seconds
 MCP_MAX_RETRIES = int(os.environ.get("MCP_MAX_RETRIES", "3"))
@@ -63,15 +63,8 @@ async def get_context_from_mcp(
     try:
         from fastmcp import Client
         
-        # Ensure the URL ends with /mcp/ for the FastMCP client
+        # Use the MCP server URL directly for SSE transport
         mcp_url = MCP_SERVER_URL
-        if not mcp_url.endswith('/mcp/'):
-            if mcp_url.endswith('/mcp'):
-                mcp_url += '/'
-            elif mcp_url.endswith('/'):
-                mcp_url += 'mcp/'
-            else:
-                mcp_url += '/mcp/'
         
         # Use the FastMCP client which handles all the protocol details
         logger.info(f"Calling MCP server with FastMCP client at: {mcp_url}")

@@ -62,7 +62,7 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_LOG=INFO
       - OTEL_EXPORTER=in_memory
-      - MCP_SERVER_URL=http://mcp:9091
+      - MCP_SERVER_URL=http://mcp:9091/sse
       - MCP_API_KEY=${MCP_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
@@ -213,8 +213,8 @@ services:
 
   mcp:
     build:
-      context: ./mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./mcp-server/Dockerfile
     environment:
       - MCP_API_KEY=${MCP_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}

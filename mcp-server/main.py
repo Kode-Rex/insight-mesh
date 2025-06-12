@@ -297,6 +297,6 @@ def system_info() -> str:
     """
 
 if __name__ == "__main__":
-    # Use the modern FastMCP run method with streamable-http transport
-    logger.info(f"Starting FastMCP server with streamable-http on {settings.MCP_HOST}:{settings.MCP_PORT}...")
+    # Use SSE transport (Server-Sent Events)
+    logger.info(f"Starting FastMCP server with SSE transport on {settings.MCP_HOST}:{settings.MCP_PORT}...")
     mcp.run(transport="sse", host=settings.MCP_HOST, port=settings.MCP_PORT) 
