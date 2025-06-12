@@ -20,7 +20,7 @@
         "tools": {
             "webcat": {
                 "service": "webcat",
-                "url": "TODO : look this up as per the `service list` command",
+                "url": "TODO : look this up as per the `service status` command",
                 "description": "Search the web",
                 "permissions": [
                     "*",

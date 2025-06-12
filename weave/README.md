@@ -180,9 +180,9 @@ weave vault list
 
 ### Services
 
-List all running services:
+Show status of all running services:
 ```bash
-weave service list
+weave service status
 ```
 
 Open a service in the browser:
@@ -281,7 +281,7 @@ The `services` section maps Docker containers to logical services:
     - `container_patterns`: An array of container name patterns to match
     - `depends_on`: Optional array of services this service depends on
 
-When running `weave service list`, containers are grouped by their matching service based on the container name or image patterns.
+When running `weave service status`, containers are grouped by their matching service based on the container name or image patterns.
 
 ## Command Help
 
