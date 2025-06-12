@@ -47,14 +47,14 @@ class SlackUser(SlackBase):
 
 **Enhanced Migration Detection:**
 - `annotation_migration_detector.py` - Detects annotation changes
-- Enhanced `weave migrate create --autogenerate` - Now detects both SQLAlchemy and annotation changes
+- Enhanced `weave db create --auto` - Now detects both SQLAlchemy and annotation changes
 - Automatic generation of Neo4j and Elasticsearch migrations
 
 **Workflow:**
 ```bash
 # 1. Add annotations to your models
 # 2. Run autogenerate migration
-weave migrate create slack "add search and graph capabilities" --autogenerate
+weave db create slack "add search and graph capabilities" --auto
 
 # This now automatically:
 # → Detects annotation changes
@@ -63,7 +63,7 @@ weave migrate create slack "add search and graph capabilities" --autogenerate
 # → Creates SQLAlchemy migration (if needed)
 
 # 3. Apply all migrations
-weave migrate up
+weave db migrate all
 ```
 
 ### 4. Documentation & Examples
@@ -78,7 +78,7 @@ weave migrate up
 
 ### ✅ **Seamless Integration**
 - No separate annotation management commands needed
-- Integrates with existing `weave migrate` workflow
+- Integrates with existing `weave db` workflow
 - Automatic detection of annotation changes
 - Single command creates migrations across all systems
 
@@ -112,7 +112,7 @@ class SlackUser(SlackBase):
 
 ### 2. Generate Migrations
 ```bash
-weave migrate create slack "add search and graph capabilities" --autogenerate
+weave db create slack "add search and graph capabilities" --auto
 ```
 **Automatically detects and creates:**
 - Neo4j constraints and indexes
@@ -121,7 +121,7 @@ weave migrate create slack "add search and graph capabilities" --autogenerate
 
 ### 3. Apply Migrations
 ```bash
-weave migrate up
+weave db migrate all
 ```
 **Applies migrations across all systems**
 
@@ -152,7 +152,7 @@ The annotation system is seamlessly integrated into Weave:
 
 1. **Location**: `weave/bin/modules/annotations/`
 2. **Migration Detection**: `annotation_migration_detector.py`
-3. **CLI Integration**: Enhanced `weave migrate create --autogenerate`
+3. **CLI Integration**: Enhanced `weave db create --auto`
 4. **Future**: Will be extracted when Weave becomes standalone
 
 ## Migration Path
@@ -160,8 +160,8 @@ The annotation system is seamlessly integrated into Weave:
 For existing projects:
 
 1. **Add annotations** to existing SQLAlchemy models
-2. **Run autogenerate** - `weave migrate create <db> "add multi-store" --autogenerate`
-3. **Apply migrations** - `weave migrate up`
+2. **Run autogenerate** - `weave db create <db> "add multi-store" --auto`
+3. **Apply migrations** - `weave db migrate all`
 4. **Use new capabilities** in application code
 
 No separate annotation management needed!

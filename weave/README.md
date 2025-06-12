@@ -33,18 +33,15 @@ Weave supports multiple database schemas with separate migration directories for
 **Run migrations:**
 ```bash
 # Migrate all databases
-weave db migrate
+weave db migrate all
 
 # Migrate specific database
 weave db migrate slack
 weave db migrate insightmesh
 
 # Preview what would be migrated (dry-run)
-weave db migrate --dry-run
+weave db migrate all --dry-run
 weave db migrate slack --dry-run
-
-# Skip database creation step
-weave db migrate --skip-db-creation
 ```
 
 **Check migration status:**
@@ -106,6 +103,15 @@ weave db seed
 
 # Seed specific database
 weave db seed slack
+```
+
+**Manage migration tools:**
+```bash
+# Check status of migration tools
+weave db tool status
+
+# Install missing migration tools
+weave db tool install
 ```
 
 #### Migration Structure

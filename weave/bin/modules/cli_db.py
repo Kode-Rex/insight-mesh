@@ -506,8 +506,7 @@ def db_reset(ctx, database, force):
         ctx.exit(1)
 
 @db_group.command('seed')
-@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
-              default='all', help='Database to seed')
+@click.argument('database', type=click.Choice(get_database_choices() + ['all']), default='all')
 @click.pass_context
 def db_seed(ctx, database):
     """Seed databases with sample data
@@ -518,7 +517,7 @@ def db_seed(ctx, database):
     weave db seed
     
     Seed specific database:
-    weave db seed --database slack
+    weave db seed slack
     """
     console.print(f"[blue]Seeding {database} database(s)...[/blue]")
     

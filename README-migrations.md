@@ -40,15 +40,13 @@ weave db migrate elasticsearch  # Uses HTTP-based (Search)
 weave db migrate all
 ```
 
-### Run All Migrations by Type
+### Run All Migrations
 ```bash
 # Migrate all database systems
-weave db migrate-all
+weave db migrate all
 
-# Migrate specific types only
-weave db migrate-all --no-include-sql      # Skip PostgreSQL
-weave db migrate-all --no-include-graph    # Skip Neo4j
-weave db migrate-all --no-include-search   # Skip Elasticsearch
+# Preview what would be migrated
+weave db migrate all --dry-run
 ```
 
 ### Individual Database Migrations
@@ -64,7 +62,7 @@ weave db migrate slack
 weave db migrate insightmesh
 
 # Show current state
-weave db current slack
+weave db status slack
 weave db history slack
 ```
 
@@ -73,11 +71,7 @@ weave db history slack
 # Apply migrations (smart command)
 weave db migrate neo4j
 
-# Direct neo4j-migrations commands
-weave db migrate-neo4j migrate
-weave db migrate-neo4j info
-weave db migrate-neo4j validate
-weave db migrate-neo4j clean
+# Note: Neo4j migrations are handled automatically by 'weave db migrate neo4j'
 ```
 
 #### Elasticsearch (HTTP-based) - Type: `search`
@@ -85,9 +79,7 @@ weave db migrate-neo4j clean
 # Apply migrations (smart command)
 weave db migrate elasticsearch
 
-# Direct elasticsearch commands
-weave db migrate-elasticsearch migrate
-weave db migrate-elasticsearch info
+# Note: Elasticsearch migrations are handled automatically by 'weave db migrate elasticsearch'
 ```
 
 ## Database Configuration
@@ -184,28 +176,19 @@ Content-Type: application/json
 ### Smart Commands (Recommended)
 ```bash
 weave db info                    # Show all databases and types
+weave db status                  # Show migration status for all databases
 weave db migrate <database>      # Smart migrate (auto-detects tool)
 weave db migrate all             # Migrate all databases
-weave db migrate-all             # Migrate all with type filtering
 ```
 
 ### Type-Specific Commands
 ```bash
-# SQL databases (PostgreSQL + Alembic)
+# All databases (unified commands)
 weave db create <database> <message>     # Create migration
 weave db migrate <database>              # Apply migrations
-weave db current <database>              # Show current revision
+weave db status <database>               # Show current status
 weave db history <database>              # Show migration history
-
-# Graph databases (Neo4j + neo4j-migrations)
-weave db migrate-neo4j migrate           # Apply migrations
-weave db migrate-neo4j info              # Show migration info
-weave db migrate-neo4j validate          # Validate migrations
-weave db migrate-neo4j clean             # Clean database
-
-# Search databases (Elasticsearch + HTTP)
-weave db migrate-elasticsearch migrate   # Apply migrations
-weave db migrate-elasticsearch info      # Show current indices
+weave db rollback <database>             # Rollback migrations
 ```
 
 ## Installation Requirements
@@ -256,6 +239,8 @@ ELASTICSEARCH_SCHEME=http
 
 ### General
 1. **Use smart commands** - `weave db migrate <database>` auto-detects the right tool
+2. **Check tool status** - `weave db tool status` shows available migration tools
+3. **Install missing tools** - `weave db tool install` installs required dependencies
 2. **Check database info** - `weave db info` shows all databases and their types
 3. **Always backup** before running migrations in production
 4. **Test migrations** in development first

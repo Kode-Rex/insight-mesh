@@ -47,10 +47,10 @@ def db_tools_install(ctx, force):
     else:
         check_and_install_tools()
 
-@db_tool_group.command('check')
+@db_tool_group.command('status')
 @click.pass_context
-def db_tools_check(ctx):
-    """Check availability of migration tools
+def db_tools_status(ctx):
+    """Show status of migration tools
     
     This command will check if all required migration tools are available:
     - Python dependencies (requests, psycopg2, etc.)
@@ -59,8 +59,8 @@ def db_tools_check(ctx):
     
     Examples:
     
-    Check tool availability:
-    weave db tool check
+    Check tool status:
+    weave db tool status
     """
     from .cli_migrate import check_and_install_tools
     

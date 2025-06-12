@@ -79,11 +79,11 @@ The updated models integrate seamlessly with the existing migration system:
 
 ```bash
 # Generate migrations with annotation detection
-weave migrate create insightmesh "Add multi-store annotations" --autogenerate
-weave migrate create slack "Add multi-store annotations" --autogenerate
+weave db create insightmesh "Add multi-store annotations" --auto
+weave db create slack "Add multi-store annotations" --auto
 
 # Apply all migrations
-weave migrate up
+weave db migrate all
 ```
 
 The migration system will automatically:
@@ -100,7 +100,7 @@ The migration system will automatically:
 3. **Business Logic Preserved**: All existing functionality maintained
 4. **Enhanced Capabilities**: Added multi-store search and relationships
 5. **Automatic Synchronization**: Data stays consistent across stores
-6. **Familiar Workflow**: Uses existing `weave migrate` commands
+6. **Familiar Workflow**: Uses existing `weave db` commands
 
 ## Usage
 
