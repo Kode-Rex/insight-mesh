@@ -11,8 +11,8 @@ from datetime import datetime
 from dataclasses import dataclass
 
 # Import the data layer models
-from data.slack import SlackUser
-from data.insightmesh import InsightMeshUser
+from domain.data.slack import SlackUser
+from domain.data.insightmesh import InsightMeshUser
 
 
 @dataclass
@@ -185,7 +185,7 @@ class User:
         if not self._insightmesh_user:
             return []
         
-        from data.insightmesh import Conversation
+        from domain.data.insightmesh import Conversation
         im_session = session_factories.get('insightmesh') if session_factories else None
         if im_session:
             return im_session.query(Conversation).filter_by(user_id=self._insightmesh_user.id).all()

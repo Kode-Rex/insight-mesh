@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 # Import the data layer models
-from data.insightmesh import Conversation as InsightMeshConversation, Message as InsightMeshMessage
-from data.slack import SlackChannel
+from domain.data.insightmesh import Conversation as InsightMeshConversation, Message as InsightMeshMessage
+from domain.data.slack import SlackChannel
 
 
 class ConversationType(Enum):

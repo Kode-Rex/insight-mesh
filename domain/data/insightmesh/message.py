@@ -21,8 +21,7 @@ from weave.bin.modules.annotations import neo4j_node, elasticsearch_index, neo4j
 @neo4j_relationship(
     type="AUTHORED_BY",
     target_model="InsightMeshUser",
-    source_field="user_id",
-    condition="role == 'user'"  # Only create relationship for user messages
+    source_field="user_id"
 )
 @elasticsearch_index(
     index_name="messages",
