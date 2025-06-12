@@ -1,7 +1,8 @@
 import os
 import sys
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, create_engine, text
+from sqlalchemy.exc import OperationalError
 from alembic import context
 
 # Add the project root to the path so we can import our models
@@ -31,6 +32,32 @@ def get_database_url() -> str:
     
     return f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/slack"
 
+def ensure_database_exists():
+    """Create the slack database if it doesn't exist"""
+    postgres_user = os.getenv('POSTGRES_USER', 'postgres')
+    postgres_password = os.getenv('POSTGRES_PASSWORD', 'postgres')
+    postgres_host = os.getenv('POSTGRES_HOST', 'postgres')
+    postgres_port = os.getenv('POSTGRES_PORT', '5432')
+    
+    # Connect to the default postgres database to create slack database
+    admin_url = f"postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/postgres"
+    
+    try:
+        admin_engine = create_engine(admin_url, isolation_level='AUTOCOMMIT')
+        with admin_engine.connect() as conn:
+            # Check if database exists
+            result = conn.execute(text("SELECT 1 FROM pg_database WHERE datname = 'slack'"))
+            if not result.fetchone():
+                # Create the database
+                conn.execute(text("CREATE DATABASE slack"))
+                print("Created slack database")
+            else:
+                print("slack database already exists")
+        admin_engine.dispose()
+    except Exception as e:
+        print(f"Warning: Could not ensure slack database exists: {e}")
+        # Continue anyway - maybe it exists or will be created by Docker
+
 def run_migrations_offline():
     """Run migrations in 'offline' mode."""
     url = get_database_url()
@@ -47,6 +74,9 @@ def run_migrations_offline():
 
 def run_migrations_online():
     """Run migrations in 'online' mode."""
+    # Ensure the database exists before trying to connect
+    ensure_database_exists()
+    
     url = get_database_url()
     connectable = engine_from_config(
         {'sqlalchemy.url': url},
