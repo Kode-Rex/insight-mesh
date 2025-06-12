@@ -50,12 +50,14 @@ def neo4j_node(label: str,
         )
         cls._neo4j_node_config = config
         
-        # Add GraphMixin if not already present
+        # Add GraphMixin methods if not already present
         if not hasattr(cls, 'sync_to_neo4j'):
             # Dynamically add mixin methods
             for attr_name in dir(GraphMixin):
-                if not attr_name.startswith('_'):
-                    setattr(cls, attr_name, getattr(GraphMixin, attr_name))
+                if not attr_name.startswith('__'):  # Include _get_neo4j_properties but not __init__ etc
+                    attr_value = getattr(GraphMixin, attr_name)
+                    if callable(attr_value):
+                        setattr(cls, attr_name, attr_value)
         
         return cls
     return decorator

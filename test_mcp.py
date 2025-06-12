@@ -1,6 +1,8 @@
 import asyncio
+import pytest
 from fastmcp import Client
 
+@pytest.mark.asyncio
 async def test_mcp_client():
     try:
         # Create FastMCP client for SSE transport

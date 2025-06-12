@@ -53,12 +53,14 @@ def elasticsearch_index(index_name: str,
         )
         cls._elasticsearch_config = config
         
-        # Add SearchMixin if not already present
-        if not hasattr(cls, '_sync_to_elasticsearch'):
+        # Add SearchMixin methods if not already present
+        if not hasattr(cls, 'sync_to_elasticsearch'):
             # Dynamically add mixin methods
             for attr_name in dir(SearchMixin):
-                if not attr_name.startswith('_'):
-                    setattr(cls, attr_name, getattr(SearchMixin, attr_name))
+                if not attr_name.startswith('__'):  # Include _get_elasticsearch_document but not __init__ etc
+                    attr_value = getattr(SearchMixin, attr_name)
+                    if callable(attr_value):
+                        setattr(cls, attr_name, attr_value)
         
         return cls
     return decorator

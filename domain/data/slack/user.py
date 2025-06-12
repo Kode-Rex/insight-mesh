@@ -5,7 +5,7 @@ Slack user model with multi-store capabilities.
 from sqlalchemy import Column, String, DateTime, JSON, Boolean
 from sqlalchemy.sql import func
 from .base import SlackBase
-from weave.bin.modules.annotations import neo4j_node, elasticsearch_index, neo4j_relationship
+from weave.bin.modules.annotations import neo4j_node, elasticsearch_index, neo4j_relationship, SyncMixin
 
 
 @neo4j_node(
@@ -18,7 +18,7 @@ from weave.bin.modules.annotations import neo4j_node, elasticsearch_index, neo4j
     text_fields=['name', 'real_name', 'display_name'],  # Fields for full-text search
     exclude_fields=['data']  # Exclude JSON field from search
 )
-class SlackUser(SlackBase):
+class SlackUser(SlackBase, SyncMixin):
     """Slack user model with Neo4j and Elasticsearch capabilities"""
     __tablename__ = 'slack_users'
     

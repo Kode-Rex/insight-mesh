@@ -40,10 +40,15 @@ async def test_validate_token():
     assert user_info.email == "tmfrisinger@gmail.com"
     assert user_info.token_type == "OpenWebUI"
     
-    # Test with Slack token
-    user_info = await validate_token("slack:U123456", "Slack")
-    assert user_info.id == "U123456"
-    assert user_info.token_type == "Slack"
+    # Test with Slack token - mock the database call
+    with patch("main.get_slack_user_by_id", new_callable=AsyncMock) as mock_get_slack_user:
+        # Mock returning None (user not found) to test the fallback behavior
+        mock_get_slack_user.return_value = None
+        
+        user_info = await validate_token("slack:U123456", "Slack")
+        assert user_info.id == "U123456"
+        assert user_info.token_type == "Slack"
+        assert user_info.email == "tmfrisinger@gmail.com"  # Should use default fallback
     
     # Test with invalid token should raise an error
     with pytest.raises(ValueError):
