@@ -2,10 +2,7 @@
 
 import click
 from rich.console import Console
-from .cli_migrate import (
-    migrate_up, migrate_down, migrate_create, 
-    migrate_status, migrate_history
-)
+
 from .config import get_managed_databases, get_database_choices
 from .cli_db_tools import db_tool_group
 
@@ -188,8 +185,36 @@ def db_rollback(ctx, database, revision, dry_run):
         console.print("[yellow]💡 Run without --dry-run to execute the rollback[/yellow]")
         return
     
-    # Call the underlying migrate_down function
-    ctx.invoke(migrate_down, database=database, revision=revision)
+    # Implement rollback logic directly
+    from .config import get_database_type
+    
+    db_type = get_database_type(database)
+    
+    try:
+        if db_type == 'sql':
+            # Use Alembic for SQL databases
+            from .cli_migrate import migrate_database
+            action = 'downgrade'
+            if revision:
+                action = f'downgrade {revision}'
+            else:
+                action = 'downgrade -1'  # Rollback one migration
+            
+            console.print(f"[bold yellow]🔄 Rolling back {database} database[/bold yellow]")
+            result = migrate_database(database, action)
+            
+            if result:
+                console.print(f"[green]✅ {database} rollback completed successfully[/green]")
+            else:
+                console.print(f"[red]❌ {database} rollback failed[/red]")
+                ctx.exit(1)
+        else:
+            console.print(f"[red]❌ Rollback not supported for {db_type} databases[/red]")
+            ctx.exit(1)
+            
+    except Exception as e:
+        console.print(f"[red]❌ Error rolling back {database}: {e}[/red]")
+        ctx.exit(1)
 
 @db_group.command('create')
 @click.argument('database', type=click.Choice(get_managed_databases()))
@@ -281,8 +306,83 @@ def db_status(ctx, database):
     # Default to 'all' if no database specified
     if database is None:
         database = 'all'
-    # Call the underlying migrate_status function
-    ctx.invoke(migrate_status, database=database)
+    # Implement status logic directly
+    from .config import (get_managed_databases, get_database_type, 
+                        get_database_migration_tool)
+    from rich.table import Table
+    
+    try:
+        if database == 'all':
+            table = Table(title="Database Migration Status")
+            table.add_column("Database", style="cyan", no_wrap=True)
+            table.add_column("Type", style="blue")
+            table.add_column("Status", style="green")
+            
+            for db in get_managed_databases():
+                try:
+                    db_type = get_database_type(db)
+                    
+                    if db_type == 'sql':
+                        # Use Alembic for SQL databases
+                        from .cli_migrate import show_current_revision
+                        revision = show_current_revision(db).strip()
+                        status = revision if revision else "[yellow]No migrations applied[/yellow]"
+                    elif db_type == 'graph':
+                        # Get Neo4j migration status
+                        from .cli_migrate import get_neo4j_migration_status
+                        neo4j_status = get_neo4j_migration_status()
+                        status = neo4j_status if neo4j_status else "[yellow]No migrations found[/yellow]"
+                    elif db_type == 'search':
+                        # Get Elasticsearch migration status
+                        from .cli_migrate import get_elasticsearch_migration_status
+                        es_status = get_elasticsearch_migration_status()
+                        status = es_status if es_status else "[yellow]No migrations applied[/yellow]"
+                    else:
+                        status = "[red]Unknown database type[/red]"
+                    
+                    table.add_row(db, db_type or "unknown", status)
+                except Exception as e:
+                    table.add_row(db, "error", f"[red]Error: {str(e)}[/red]")
+            
+            console.print(table)
+        else:
+            from .config import get_database_type
+            
+            db_type = get_database_type(database)
+            
+            console.print(f"[bold blue]{database} database status:[/bold blue]")
+            console.print(f"[blue]Type: {db_type}[/blue]")
+            
+            if db_type == 'sql':
+                # Use Alembic for SQL databases
+                from .cli_migrate import show_current_revision
+                revision = show_current_revision(database)
+                if revision.strip():
+                    console.print(f"[green]Current revision: {revision.strip()}[/green]")
+                else:
+                    console.print("[yellow]No migrations applied[/yellow]")
+            elif db_type == 'graph':
+                # Get Neo4j migration status
+                from .cli_migrate import get_neo4j_migration_status
+                neo4j_status = get_neo4j_migration_status()
+                if neo4j_status:
+                    console.print(f"Status: {neo4j_status}")
+                else:
+                    console.print("[yellow]No migrations found[/yellow]")
+            elif db_type == 'search':
+                # Get Elasticsearch migration status
+                from .cli_migrate import get_elasticsearch_migration_status
+                es_status = get_elasticsearch_migration_status()
+                if es_status:
+                    console.print(f"Status: {es_status}")
+                else:
+                    console.print("[yellow]No migrations applied[/yellow]")
+            else:
+                console.print(f"[red]Unknown database type: {db_type}[/red]")
+                
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        ctx.exit(1)
 
 @db_group.command('history')
 @click.argument('database', type=click.Choice(get_managed_databases()))
@@ -298,8 +398,56 @@ def db_history(ctx, database):
     Show InsightMesh migration history:
     weave db history insightmesh
     """
-    # Call the underlying migrate_history function
-    ctx.invoke(migrate_history, database=database)
+    # Implement history logic directly
+    from .config import get_database_type
+    
+    try:
+        db_type = get_database_type(database)
+        console.print(f"[bold blue]{database} migration history:[/bold blue]")
+        
+        if db_type == 'sql':
+            # Use Alembic for SQL databases
+            from .cli_migrate import show_migration_history
+            history = show_migration_history(database)
+            console.print(history)
+        elif db_type == 'graph':
+            # Use neo4j-migrations for graph databases
+            console.print("[blue]Running neo4j-migrations info command...[/blue]")
+            from .cli_migrate import migrate_neo4j
+            result = migrate_neo4j('info')
+            if result:
+                console.print(result)
+            else:
+                console.print("[yellow]No Neo4j migration history available[/yellow]")
+        elif db_type == 'search':
+            # Elasticsearch doesn't have a traditional history command
+            console.print("[blue]Elasticsearch migration history:[/blue]")
+            console.print("[yellow]Elasticsearch migrations are applied via HTTP requests.[/yellow]")
+            console.print("[yellow]Check the .weave/migrations/elasticsearch/scripts/ directory for migration files.[/yellow]")
+            
+            # List migration files
+            from pathlib import Path
+            from .cli_migrate import get_project_root
+            project_root = get_project_root()
+            migrations_dir = project_root / '.weave' / 'migrations' / 'elasticsearch' / 'scripts'
+            
+            if migrations_dir.exists():
+                migration_files = sorted(migrations_dir.glob("V*.http"))
+                if migration_files:
+                    console.print("\n[blue]Available migration files:[/blue]")
+                    for migration_file in migration_files:
+                        console.print(f"  • {migration_file.name}")
+                else:
+                    console.print("[yellow]No migration files found[/yellow]")
+            else:
+                console.print("[yellow]No Elasticsearch migrations directory found[/yellow]")
+        else:
+            console.print(f"[red]Unknown database type: {db_type}[/red]")
+            console.print("[yellow]Cannot show migration history for this database type[/yellow]")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        ctx.exit(1)
 
 # Additional database utility commands
 @db_group.command('reset')
@@ -328,14 +476,34 @@ def db_reset(ctx, database, force):
     
     # First rollback all migrations
     try:
-        ctx.invoke(migrate_down, database=database, revision='base')
-        console.print(f"[green]✅ Rolled back all migrations for {database}[/green]")
+        from .config import get_database_type
+        db_type = get_database_type(database)
+        
+        if db_type == 'sql':
+            from .cli_migrate import migrate_database
+            result = migrate_database(database, 'downgrade base')
+            if result:
+                console.print(f"[green]✅ Rolled back all migrations for {database}[/green]")
+            else:
+                console.print(f"[yellow]Warning during rollback for {database}[/yellow]")
+        else:
+            console.print(f"[yellow]Reset not supported for {db_type} databases[/yellow]")
+            return
     except Exception as e:
         console.print(f"[yellow]Warning during rollback: {e}[/yellow]")
     
     # Then re-run all migrations
-    ctx.invoke(migrate_up, database=database, skip_db_creation=True)
-    console.print(f"[green]🎉 Database {database} has been reset successfully![/green]")
+    try:
+        from .cli_migrate import migrate_database
+        result = migrate_database(database, 'upgrade')
+        if result:
+            console.print(f"[green]🎉 Database {database} has been reset successfully![/green]")
+        else:
+            console.print(f"[red]❌ Failed to re-run migrations for {database}[/red]")
+            ctx.exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error re-running migrations: {e}[/red]")
+        ctx.exit(1)
 
 @db_group.command('seed')
 @click.option('--database', '-d', type=click.Choice(get_database_choices()), 

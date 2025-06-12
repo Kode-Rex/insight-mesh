@@ -15,6 +15,11 @@ console = Console()
 
 def get_env():
     """Get environment variables for database connections"""
+    from dotenv import load_dotenv
+    
+    # Load environment variables from .env file
+    load_dotenv()
+    
     env = os.environ.copy()
     
     # Set default values if not provided
@@ -33,7 +38,11 @@ def run_command(cmd, cwd=None, env=None):
     console.print(f"[blue]Running:[/blue] {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
     if result.returncode != 0:
-        console.print(f"[red]Error:[/red] {result.stderr}")
+        console.print(f"[red]Error (exit code {result.returncode}):[/red]")
+        if result.stderr:
+            console.print(f"[red]STDERR:[/red] {result.stderr}")
+        if result.stdout:
+            console.print(f"[yellow]STDOUT:[/yellow] {result.stdout}")
         sys.exit(1)
     return result.stdout
 
@@ -121,18 +130,17 @@ def migrate_database(schema_name, action='upgrade'):
     if action == 'upgrade':
         cmd.append('head')
     
-    return run_command(cmd, cwd=str(project_root), env=env)
+    result = run_command_safe(cmd, cwd=str(project_root), env=env)
+    if result.returncode != 0:
+        console.print(f"[red]Error (exit code {result.returncode}):[/red]")
+        if result.stderr:
+            console.print(f"[red]STDERR:[/red] {result.stderr}")
+        if result.stdout:
+            console.print(f"[yellow]STDOUT:[/yellow] {result.stdout}")
+        return False
+    return True
 
-def migrate_all(action='upgrade'):
-    """Run migrations for all schemas"""
-    schemas = get_managed_databases()
-    
-    for schema in schemas:
-        console.print(f"\n{'='*50}")
-        console.print(f"[bold blue]Running {action} for {schema} schema[/bold blue]")
-        console.print(f"{'='*50}")
-        migrate_database(schema, action)
-        console.print(f"[green]✅ {action.capitalize()} completed for {schema}[/green]")
+
 
 def create_migration(schema_name, message):
     """Create a new migration for a specific schema"""
@@ -472,8 +480,17 @@ def get_neo4j_migration_status() -> str:
                 for line in lines:
                     if 'Applied migrations:' in line or 'Current version:' in line:
                         return line.strip()
-                # If no specific status found, return a summary
-                return f"{len(lines)} migration entries"
+                    elif 'No migrations found' in line:
+                        return "No migrations found"
+                # Count only non-empty lines that look like migration entries
+                migration_lines = [line for line in lines if line.strip() and 
+                                 not line.startswith('neo4j@') and 
+                                 not line.startswith('Database:') and
+                                 'No migrations found' not in line]
+                if migration_lines:
+                    return f"{len(migration_lines)} migration entries"
+                else:
+                    return "No migrations found"
             return "No migrations found"
         else:
             error_msg = result.stderr.strip() if result.stderr else "Unknown error"
@@ -795,315 +812,4 @@ def check_and_install_tools():
         console.print("[green]🎉 All migration tools are available![/green]")
         return True
 
-@click.group('migrate', invoke_without_command=True)
-@click.pass_context
-def migrate_group(ctx):
-    """Manage database migrations using Alembic"""
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
-
-@migrate_group.command('up')
-@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
-              default='all', help='Database to migrate')
-@click.option('--skip-db-creation', is_flag=True, help='Skip database creation step')
-@click.pass_context
-def migrate_up(ctx, database, skip_db_creation):
-    """Run database migrations (upgrade to latest)
-    
-    This command will:
-    1. Create databases if they don't exist (unless --skip-db-creation is used)
-    2. Run table creation and data migrations
-    
-    Examples:
-    
-    Migrate all databases:
-    weave migrate up
-    
-    Migrate specific database:
-    weave migrate up --database mcp
-    
-    Skip database creation (if databases already exist):
-    weave migrate up --skip-db-creation
-    """
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    if verbose:
-        console.print(f"[blue]Running migrations for: {database}[/blue]")
-    
-    try:
-        # Step 1: Create databases if needed
-        if not skip_db_creation:
-            console.print("[bold blue]🗄️  Creating databases...[/bold blue]")
-            if not create_databases():
-                console.print("[red]❌ Failed to create databases. Aborting migration.[/red]")
-                sys.exit(1)
-            console.print("[green]✅ Database creation completed[/green]\n")
-        else:
-            console.print("[yellow]⏭️  Skipping database creation[/yellow]\n")
-        
-        # Step 2: Run table migrations
-        console.print("[bold blue]📋 Running table migrations...[/bold blue]")
-        if database == 'all':
-            migrate_all('upgrade')
-        else:
-            console.print(f"[bold blue]Running upgrade for {database} schema[/bold blue]")
-            migrate_database(database, 'upgrade')
-            console.print(f"[green]✅ Upgrade completed for {database}[/green]")
-            
-        console.print("\n[green]🎉 All migrations completed successfully![/green]")
-        
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
-
-@migrate_group.command('down')
-@click.option('--database', '-d', type=click.Choice(get_managed_databases()), 
-              required=True, help='Database to rollback')
-@click.option('--revision', '-r', help='Target revision to rollback to')
-@click.pass_context
-def migrate_down(ctx, database, revision):
-    """Rollback database migrations
-    
-    Examples:
-    
-    Rollback one migration:
-    weave migrate down --database mcp
-    
-    Rollback to specific revision:
-    weave migrate down --database mcp --revision abc123
-    """
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    if verbose:
-        console.print(f"[blue]Rolling back migrations for: {database}[/blue]")
-    
-    try:
-        action = 'downgrade'
-        if revision:
-            action = f'downgrade {revision}'
-        else:
-            action = 'downgrade -1'  # Rollback one migration
-            
-        console.print(f"[bold yellow]Running rollback for {database} schema[/bold yellow]")
-        migrate_database(database, action)
-        console.print(f"[green]✅ Rollback completed for {database}[/green]")
-        
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
-
-@migrate_group.command('create')
-@click.argument('database', type=click.Choice(get_managed_databases()))
-@click.argument('message')
-@click.option('--autogenerate', '-a', is_flag=True, help='Auto-detect model and annotation changes')
-@click.pass_context
-def migrate_create(ctx, database, message, autogenerate):
-    """Create a new migration
-    
-    Examples:
-    
-    Create MCP migration:
-    weave migrate create mcp "add user preferences table"
-    
-    Auto-generate migration based on model and annotation changes:
-    weave migrate create mcp "auto detected changes" --autogenerate
-    
-    Create Slack migration:
-    weave migrate create insight_mesh "add slack message history"
-    """
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    if verbose:
-        console.print(f"[blue]Creating migration for {database}: {message}[/blue]")
-    
-    try:
-        if autogenerate:
-            console.print(f"[bold blue]Creating auto-generated migration for {database} schema[/bold blue]")
-            
-            # First, detect annotation changes and create migrations for Neo4j/Elasticsearch
-            annotation_files = detect_and_create_annotation_migrations(message)
-            
-            # Then create the SQLAlchemy migration
-            result = create_migration_autogenerate(database, message)
-            
-            console.print(f"[green]✅ SQLAlchemy migration created successfully[/green]")
-            
-            if annotation_files:
-                console.print(f"[green]✅ Also created {len(annotation_files)} annotation migrations[/green]")
-                console.print("[blue]💡 Run 'weave migrate up' to apply all migrations[/blue]")
-        else:
-            console.print(f"[bold blue]Creating new migration for {database} schema[/bold blue]")
-            result = create_migration(database, message)
-            console.print(f"[green]✅ Migration created successfully[/green]")
-        
-        if verbose and result:
-            console.print(f"[blue]Output:[/blue] {result}")
-            
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
-
-@migrate_group.command('status')
-@click.option('--database', '-d', type=click.Choice(get_database_choices()), 
-              default='all', help='Database to check')
-@click.pass_context
-def migrate_status(ctx, database):
-    """Show migration status
-    
-    Examples:
-    
-    Show status for all databases:
-    weave migrate status
-    
-    Show status for specific database:
-    weave migrate status --database mcp
-    """
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    try:
-        if database == 'all':
-            from .config import (get_managed_databases, get_database_type, 
-                               get_database_migration_tool)
-            
-            table = Table(title="Database Migration Status")
-            table.add_column("Database", style="cyan", no_wrap=True)
-            table.add_column("Type", style="blue")
-            table.add_column("Status", style="green")
-            
-            for db in get_managed_databases():
-                try:
-                    db_type = get_database_type(db)
-                    
-                    if db_type == 'sql':
-                        # Use Alembic for SQL databases
-                        revision = show_current_revision(db).strip()
-                        status = revision if revision else "[yellow]No migrations applied[/yellow]"
-                    elif db_type == 'graph':
-                        # Get Neo4j migration status
-                        neo4j_status = get_neo4j_migration_status()
-                        status = neo4j_status if neo4j_status else "[yellow]No migrations applied[/yellow]"
-                    elif db_type == 'search':
-                        # Get Elasticsearch migration status
-                        es_status = get_elasticsearch_migration_status()
-                        status = es_status if es_status else "[yellow]No migrations applied[/yellow]"
-                    else:
-                        status = "[red]Unknown database type[/red]"
-                    
-                    table.add_row(db, db_type or "unknown", status)
-                except Exception as e:
-                    table.add_row(db, "error", f"[red]Error: {str(e)}[/red]")
-            
-            console.print(table)
-        else:
-            from .config import get_database_type
-            
-            db_type = get_database_type(database)
-            
-            console.print(f"[bold blue]{database} database status:[/bold blue]")
-            console.print(f"[blue]Type: {db_type}[/blue]")
-            
-            if db_type == 'sql':
-                # Use Alembic for SQL databases
-                revision = show_current_revision(database)
-                if revision.strip():
-                    console.print(f"[green]Current revision: {revision.strip()}[/green]")
-                else:
-                    console.print("[yellow]No migrations applied[/yellow]")
-            elif db_type == 'graph':
-                # Get Neo4j migration status
-                neo4j_status = get_neo4j_migration_status()
-                if neo4j_status:
-                    console.print(f"Status: {neo4j_status}")
-                else:
-                    console.print("[yellow]No migrations applied[/yellow]")
-            elif db_type == 'search':
-                # Get Elasticsearch migration status
-                es_status = get_elasticsearch_migration_status()
-                if es_status:
-                    console.print(f"Status: {es_status}")
-                else:
-                    console.print("[yellow]No migrations applied[/yellow]")
-            else:
-                console.print(f"[red]Unknown database type: {db_type}[/red]")
-                
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
-
-@migrate_group.command('history')
-@click.argument('database', type=click.Choice(get_managed_databases()))
-@click.pass_context
-def migrate_history(ctx, database):
-    """Show migration history
-    
-    Examples:
-    
-    Show MCP migration history:
-    weave migrate history mcp
-    
-    Show Slack migration history:
-    weave migrate history insight_mesh
-    """
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    try:
-        from .config import get_database_type
-        
-        db_type = get_database_type(database)
-        console.print(f"[bold blue]{database} migration history:[/bold blue]")
-        
-        if db_type == 'sql':
-            # Use Alembic for SQL databases
-            history = show_migration_history(database)
-            console.print(history)
-        elif db_type == 'graph':
-            # Use neo4j-migrations for graph databases
-            console.print("[blue]Running neo4j-migrations info command...[/blue]")
-            result = migrate_neo4j('info')
-            if result:
-                console.print(result)
-            else:
-                console.print("[yellow]No Neo4j migration history available[/yellow]")
-        elif db_type == 'search':
-            # Elasticsearch doesn't have a traditional history command
-            console.print("[blue]Elasticsearch migration history:[/blue]")
-            console.print("[yellow]Elasticsearch migrations are applied via HTTP requests.[/yellow]")
-            console.print("[yellow]Check the .weave/migrations/elasticsearch/scripts/ directory for migration files.[/yellow]")
-            
-            # List migration files
-            from pathlib import Path
-            project_root = get_project_root()
-            migrations_dir = project_root / '.weave' / 'migrations' / 'elasticsearch' / 'scripts'
-            
-            if migrations_dir.exists():
-                migration_files = sorted(migrations_dir.glob("V*.http"))
-                if migration_files:
-                    console.print("\n[blue]Available migration files:[/blue]")
-                    for migration_file in migration_files:
-                        console.print(f"  • {migration_file.name}")
-                else:
-                    console.print("[yellow]No migration files found[/yellow]")
-            else:
-                console.print("[yellow]No Elasticsearch migrations directory found[/yellow]")
-        else:
-            console.print(f"[red]Unknown database type: {db_type}[/red]")
-            console.print("[yellow]Cannot show migration history for this database type[/yellow]")
-        
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1) 
+ 
