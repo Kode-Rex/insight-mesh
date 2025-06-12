@@ -90,14 +90,14 @@ class TestElasticsearchService:
         
         # Check that user email is in the permission filter
         should_clauses = body["query"]["bool"]["should"]
-        email_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_emails.keyword")]
+        email_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_emails")]
         assert len(email_clause) == 1
-        assert email_clause[0]["term"]["meta.accessible_by_emails.keyword"] == "tmfrisinger@gmail.com"
+        assert email_clause[0]["term"]["meta.accessible_by_emails"] == "tmfrisinger@gmail.com"
         
         # Check that domain filtering is included
-        domain_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_domains.keyword")]
+        domain_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_domains")]
         assert len(domain_clause) == 1
-        assert domain_clause[0]["term"]["meta.accessible_by_domains.keyword"] == "gmail.com"
+        assert domain_clause[0]["term"]["meta.accessible_by_domains"] == "gmail.com"
         
         # Check that minimum_should_match is set
         assert body["query"]["bool"]["minimum_should_match"] == 1

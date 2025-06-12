@@ -45,10 +45,10 @@ class ElasticsearchService:
                                 # Match public documents
                                 {"term": {"meta.is_public": True}},
                                 # Match documents where user's email is in accessible_by_emails
-                                {"term": {"meta.accessible_by_emails.keyword": user_email}},
+                                {"term": {"meta.accessible_by_emails": user_email}},
                                 # Match domain-based access if the user's email contains a domain
                                 # e.g., if user_email is "user@example.com", match documents accessible by "example.com"
-                                {"term": {"meta.accessible_by_domains.keyword": user_email.split("@")[1] if "@" in user_email else ""}},
+                                {"term": {"meta.accessible_by_domains": user_email.split("@")[1] if "@" in user_email else ""}},
                             ],
                             "minimum_should_match": 1
                         }

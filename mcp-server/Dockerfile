@@ -11,13 +11,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
-COPY requirements.txt .
+COPY ./mcp-server/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy shared domain code and weave module from parent directory
+COPY ./domain ./domain
+COPY ./weave ./weave
+
 # Copy application code
-COPY . .
+COPY ./mcp-server .
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && \
