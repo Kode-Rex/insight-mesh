@@ -21,8 +21,9 @@ def db_group(ctx):
 @db_group.command('migrate')
 @click.argument('database', type=click.Choice(get_managed_databases() + ['all']))
 @click.argument('action', default='upgrade')
+@click.option('--dry-run', is_flag=True, help='Show what migrations would be run without executing them')
 @click.pass_context
-def db_migrate_smart(ctx, database, action):
+def db_migrate_smart(ctx, database, action, dry_run):
     """Smart migration command that detects database type and uses the appropriate tool.
     
     This command automatically detects whether the database is SQL, graph, or search
@@ -31,9 +32,16 @@ def db_migrate_smart(ctx, database, action):
     from .config import (get_database_type, get_database_migration_tool, 
                         get_all_databases, is_database_managed)
     
+    if dry_run:
+        console.print("[bold blue]🔍 DRY RUN - Showing what migrations would be executed:[/bold blue]")
+        console.print()
+    
     if database == 'all':
         # Migrate all databases
-        console.print("[blue]🔄 Running migrations for all database systems[/blue]")
+        if dry_run:
+            console.print("[blue]📋 Would migrate all database systems:[/blue]")
+        else:
+            console.print("[blue]🔄 Running migrations for all database systems[/blue]")
         
         from .config import (get_sql_databases, get_graph_databases, get_search_databases, 
                             get_database_migration_tool, get_database_type)
@@ -45,6 +53,14 @@ def db_migrate_smart(ctx, database, action):
             try:
                 db_type = get_database_type(db_name)
                 migration_tool = get_database_migration_tool(db_name)
+                
+                if dry_run:
+                    console.print(f"[blue]📋 Would migrate {db_name} database:[/blue]")
+                    console.print(f"  • Type: {db_type}")
+                    console.print(f"  • Tool: {migration_tool}")
+                    console.print(f"  • Action: {action}")
+                    continue
+                
                 console.print(f"[blue]🔄 Migrating {db_name} database (using {migration_tool})...[/blue]")
                 
                 if db_type == 'sql':
@@ -72,7 +88,10 @@ def db_migrate_smart(ctx, database, action):
                 console.print(f"[red]❌ Error migrating {db_name}: {e}[/red]")
                 success = False
         
-        if success:
+        if dry_run:
+            console.print("\n[yellow]💡 Run without --dry-run to execute the migrations[/yellow]")
+            return
+        elif success:
             console.print("\n[green]🎉 All database migrations completed successfully![/green]")
         else:
             console.print("\n[red]💥 Some migrations failed. Check the logs above.[/red]")
@@ -86,6 +105,15 @@ def db_migrate_smart(ctx, database, action):
     
     db_type = get_database_type(database)
     migration_tool = get_database_migration_tool(database)
+    
+    if dry_run:
+        console.print(f"[blue]📋 Would migrate {database} database:[/blue]")
+        console.print(f"  • Type: {db_type}")
+        console.print(f"  • Tool: {migration_tool}")
+        console.print(f"  • Action: {action}")
+        console.print()
+        console.print("[yellow]💡 Run without --dry-run to execute the migration[/yellow]")
+        return
     
     console.print(f"[blue]🔄 Migrating {database} database[/blue]")
     console.print(f"[blue]📋 Type: {db_type}, Tool: {migration_tool}[/blue]")
