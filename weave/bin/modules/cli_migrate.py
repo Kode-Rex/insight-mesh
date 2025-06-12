@@ -1059,9 +1059,47 @@ def migrate_history(ctx, database):
     verbose = ctx.obj.get('VERBOSE', False)
     
     try:
+        from .config import get_database_type
+        
+        db_type = get_database_type(database)
         console.print(f"[bold blue]{database} migration history:[/bold blue]")
-        history = show_migration_history(database)
-        console.print(history)
+        
+        if db_type == 'sql':
+            # Use Alembic for SQL databases
+            history = show_migration_history(database)
+            console.print(history)
+        elif db_type == 'graph':
+            # Use neo4j-migrations for graph databases
+            console.print("[blue]Running neo4j-migrations info command...[/blue]")
+            result = migrate_neo4j('info')
+            if result:
+                console.print(result)
+            else:
+                console.print("[yellow]No Neo4j migration history available[/yellow]")
+        elif db_type == 'search':
+            # Elasticsearch doesn't have a traditional history command
+            console.print("[blue]Elasticsearch migration history:[/blue]")
+            console.print("[yellow]Elasticsearch migrations are applied via HTTP requests.[/yellow]")
+            console.print("[yellow]Check the .weave/migrations/elasticsearch/scripts/ directory for migration files.[/yellow]")
+            
+            # List migration files
+            from pathlib import Path
+            project_root = get_project_root()
+            migrations_dir = project_root / '.weave' / 'migrations' / 'elasticsearch' / 'scripts'
+            
+            if migrations_dir.exists():
+                migration_files = sorted(migrations_dir.glob("V*.http"))
+                if migration_files:
+                    console.print("\n[blue]Available migration files:[/blue]")
+                    for migration_file in migration_files:
+                        console.print(f"  • {migration_file.name}")
+                else:
+                    console.print("[yellow]No migration files found[/yellow]")
+            else:
+                console.print("[yellow]No Elasticsearch migrations directory found[/yellow]")
+        else:
+            console.print(f"[red]Unknown database type: {db_type}[/red]")
+            console.print("[yellow]Cannot show migration history for this database type[/yellow]")
         
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user[/yellow]")
