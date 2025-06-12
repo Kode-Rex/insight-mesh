@@ -199,9 +199,57 @@ jobs:
             assert result == 1, 'Neo4j connection test failed'
         "
 
+  test-annotations:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov pytest-mock
+        
+    - name: Run annotation tests
+      run: |
+        python -m pytest tests/test_annotations.py -v --cov=. --cov-report=xml:coverage-annotations.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage-annotations.xml
+        flags: annotations
+        fail_ci_if_error: false
+
+  test-mcp-client:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install fastmcp==2.7.0 pytest pytest-asyncio
+        
+    - name: Run MCP client test
+      run: |
+        python -m pytest test_mcp.py -v
+        
   # This job will only run when all required test jobs succeed
   test-summary:
-    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project]
+    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client]
     runs-on: ubuntu-latest
     steps:
       - name: Tests Passed

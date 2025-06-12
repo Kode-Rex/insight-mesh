@@ -176,12 +176,12 @@ def service_add(ctx, service_name, image, port, env, volume, depends_on, parent,
     
     console.print(f"[blue]Run 'weave service up {service_name}' to start the service[/blue]")
 
-@service_group.command('list')
+@service_group.command('status')
 @click.option('--project-prefix', '-p', help='Project prefix for filtering services')
 @click.option('--debug', '-d', is_flag=True, help='Show debug information')
 @click.pass_context
-def service_list(ctx, project_prefix, debug):
-    """List all running Docker services with URLs"""
+def service_status(ctx, project_prefix, debug):
+    """Show status of all running Docker services with URLs"""
     project_name = get_project_name()
     prefix = project_prefix or project_name
     verbose = ctx.obj.get('VERBOSE', False)

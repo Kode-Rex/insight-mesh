@@ -27,11 +27,16 @@ except ImportError:
 @click.group(invoke_without_command=True)
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--version', is_flag=True, help='Show version and exit')
+@click.option('--test-mode', is_flag=True, help='Enable test mode (simulates commands without executing)')
 @click.pass_context
-def cli(ctx, verbose, version):
+def cli(ctx, verbose, version, test_mode):
     """Weaver: A Rails-like framework for rapidly building and deploying enterprise-grade GenAI applications."""
     ctx.ensure_object(dict)
     ctx.obj['VERBOSE'] = verbose
+    ctx.obj['TEST_MODE'] = test_mode or os.getenv('WEAVE_TEST_MODE', '').lower() in ['true', '1', 'yes']
+    
+    if ctx.obj['TEST_MODE']:
+        console.print("[yellow]🧪 TEST MODE ENABLED - Commands will be simulated[/yellow]")
     
     if version:
         console.print(f"[bold blue]Weave[/bold blue] version [green]{__version__}[/green]")

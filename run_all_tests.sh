@@ -82,4 +82,7 @@ LLM_API_KEY="test-key" \
 LLM_MODEL="gpt-4o-mini" \
 run_tests "Slack Bot" "slack-bot" "python -m pytest tests/ -v --cov=. --cov-report=term"
 
+# Root-level Tests (Annotations and MCP Client)
+run_tests "Annotations & MCP Client" "." "python -m pytest tests/test_annotations.py test_mcp.py -v"
+
 echo -e "${GREEN}=== All tests passed! ===${NC}" 

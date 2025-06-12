@@ -33,18 +33,15 @@ Weave supports multiple database schemas with separate migration directories for
 **Run migrations:**
 ```bash
 # Migrate all databases
-weave db migrate
+weave db migrate all
 
 # Migrate specific database
 weave db migrate slack
 weave db migrate insightmesh
 
 # Preview what would be migrated (dry-run)
-weave db migrate --dry-run
+weave db migrate all --dry-run
 weave db migrate slack --dry-run
-
-# Skip database creation step
-weave db migrate --skip-db-creation
 ```
 
 **Check migration status:**
@@ -106,6 +103,15 @@ weave db seed
 
 # Seed specific database
 weave db seed slack
+```
+
+**Manage migration tools:**
+```bash
+# Check status of migration tools
+weave db tool status
+
+# Install missing migration tools
+weave db tool install
 ```
 
 #### Migration Structure
@@ -174,9 +180,9 @@ weave vault list
 
 ### Services
 
-List all running services:
+Show status of all running services:
 ```bash
-weave service list
+weave service status
 ```
 
 Open a service in the browser:
@@ -275,7 +281,7 @@ The `services` section maps Docker containers to logical services:
     - `container_patterns`: An array of container name patterns to match
     - `depends_on`: Optional array of services this service depends on
 
-When running `weave service list`, containers are grouped by their matching service based on the container name or image patterns.
+When running `weave service status`, containers are grouped by their matching service based on the container name or image patterns.
 
 ## Command Help
 
