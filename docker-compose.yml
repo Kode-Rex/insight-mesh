@@ -83,7 +83,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=postgres  # Default database
-      - POSTGRES_MULTIPLE_DATABASES=openwebui,litellm,mcp,insight_mesh,slack
+      - POSTGRES_MULTIPLE_DATABASES=openwebui,litellm,insight_mesh,slack
     ports:
       - "5432:5432"
     volumes:
