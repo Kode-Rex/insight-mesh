@@ -258,9 +258,12 @@ def tool_sync(ctx, litellm_url, api_key, dry_run):
     This command reads MCP server configurations from .weave/config.json
     and creates/updates them in the LiteLLM proxy database via API.
     
+    Only servers with scope 'rag' or 'all' are synced to LiteLLM.
+    Servers with scope 'agent' are excluded from sync.
+    
     Examples:
     
-    Sync all MCP servers:
+    Sync RAG-compatible MCP servers:
     weave tool sync
     
     Sync with custom LiteLLM URL:
@@ -310,10 +313,11 @@ tool_group.add_command(tool_server)
 @click.option('--auth-type', type=click.Choice(['none', 'api_key', 'bearer_token', 'basic']), help='Authentication type')
 @click.option('--spec-version', default='2024-11-05', help='MCP spec version')
 @click.option('--description', help='Server description')
+@click.option('--scope', default='all', type=click.Choice(['rag', 'agent', 'all']), help='Server scope (rag, agent, or all)')
 @click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
 @click.option('--force', '-f', is_flag=True, help='Overwrite existing server')
 @click.pass_context
-def tool_server_add(ctx, server_name, url, transport, auth_type, spec_version, description, env, force):
+def tool_server_add(ctx, server_name, url, transport, auth_type, spec_version, description, scope, env, force):
     """Add MCP server to weave config
     
     Examples:
@@ -346,6 +350,7 @@ def tool_server_add(ctx, server_name, url, transport, auth_type, spec_version, d
         spec_version=spec_version,
         description=description or f"MCP server at {url}",
         env_vars=env_dict,
+        scope=scope,
         force=force
     )
     
@@ -397,9 +402,12 @@ def tool_init(ctx, litellm_url, api_key, wait_for_service):
     This command is designed to be run on container startup to ensure
     MCP servers from weave config are synced to LiteLLM database.
     
+    Only servers with scope 'rag' or 'all' are synced to LiteLLM.
+    Servers with scope 'agent' are excluded from initialization.
+    
     Examples:
     
-    Initialize MCP servers:
+    Initialize RAG-compatible MCP servers:
     weave tool init
     
     Wait for LiteLLM to be ready first:

@@ -2,6 +2,7 @@
 
 # MCP Server Initialization Script
 # This script syncs MCP servers from weave config to LiteLLM database
+# Only syncs servers with scope 'rag' or 'all' - agent-scoped servers are excluded
 # Designed to be run on container startup
 
 set -e
@@ -86,7 +87,8 @@ check_mcp_enabled() {
 
 # Initialize MCP servers using weave
 init_mcp_servers() {
-    log "Initializing MCP servers from weave config..."
+    log "Initializing RAG-compatible MCP servers from weave config..."
+    log "Note: Only servers with scope 'rag' or 'all' will be synced"
     
     # Change to the project directory (where .weave/config.json is located)
     if [ -n "$PROJECT_ROOT" ]; then
@@ -99,12 +101,12 @@ init_mcp_servers() {
         return 1
     fi
     
-    # Run weave tool init
+    # Run weave tool init (syncs rag and all scoped servers)
     if weave tool init \
         --litellm-url "$LITELLM_URL" \
         --api-key "$LITELLM_API_KEY" \
         --wait-for-service; then
-        log_success "MCP servers initialized successfully"
+        log_success "RAG-compatible MCP servers initialized successfully"
         return 0
     else
         log_error "Failed to initialize MCP servers"
@@ -141,7 +143,7 @@ main() {
         exit 1
     fi
     
-    log_success "MCP server initialization completed successfully!"
+    log_success "RAG-compatible MCP server initialization completed successfully!"
 }
 
 # Handle script arguments
@@ -159,6 +161,8 @@ case "${1:-}" in
         echo "  RETRY_DELAY          Delay between retries in seconds (default: 10)"
         echo "  PROJECT_ROOT         Project root directory (optional)"
         echo ""
+        echo "Note: Only MCP servers with scope 'rag' or 'all' are synced to LiteLLM."
+        echo ""
         echo "Examples:"
         echo "  $0                                    # Use default settings"
         echo "  LITELLM_URL=http://localhost:4000 $0  # Custom LiteLLM URL"
@@ -170,6 +174,7 @@ case "${1:-}" in
         log "  LiteLLM URL: $LITELLM_URL"
         log "  API Key: ${LITELLM_API_KEY:0:10}..."
         log "  Wait for service: $WAIT_FOR_SERVICE"
+        log "  Note: Only 'rag' and 'all' scoped servers will be synced"
         exit 0
         ;;
     "")

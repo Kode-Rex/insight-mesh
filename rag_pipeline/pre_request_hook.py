@@ -49,6 +49,11 @@ MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "30"))  # Timeout in seconds
 MCP_MAX_RETRIES = int(os.environ.get("MCP_MAX_RETRIES", "3"))
 TOKEN_TYPE = os.environ.get("TOKEN_TYPE", "OpenWebUI")  # Type of JWT token being used
 
+# LiteLLM Proxy configuration for MCP tools
+LITELLM_PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-1234")
+ENABLE_MCP_TOOLS = os.environ.get("ENABLE_MCP_TOOLS", "true").lower() == "true"
+
 async def get_context_from_mcp(
     api_key: str,
     auth_token: str,
@@ -103,6 +108,43 @@ async def get_context_from_mcp(
     except Exception as e:
         logger.error(f"Error calling MCP server: {str(e)}")
         return None
+
+async def get_mcp_tools_from_litellm(
+    session: Optional[aiohttp.ClientSession] = None
+) -> Optional[List[Dict[str, Any]]]:
+    """Get available MCP tools from LiteLLM proxy"""
+    try:
+        if not session:
+            session = aiohttp.ClientSession()
+            should_close = True
+        else:
+            should_close = False
+            
+        headers = {
+            "Authorization": f"Bearer {LLM_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # List available MCP tools from LiteLLM proxy
+        async with session.get(
+            f"{LITELLM_PROXY_URL}/mcp/tools/list",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=MCP_TIMEOUT)
+        ) as response:
+            if response.status == 200:
+                tools_data = await response.json()
+                logger.info(f"Retrieved {len(tools_data.get('tools', []))} MCP tools from LiteLLM")
+                return tools_data.get('tools', [])
+            else:
+                logger.warning(f"Failed to get MCP tools: {response.status}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error getting MCP tools from LiteLLM: {str(e)}")
+        return None
+    finally:
+        if should_close and session:
+            await session.close()
 
 def summarize_conversation_history(messages: List[Dict[str, str]]) -> str:
     """Create a summary of the conversation history"""
@@ -232,9 +274,11 @@ class RAGHandler(CustomLogger):
             history_summary = summarize_conversation_history(messages[:-1])  # Exclude latest message
             logger.info(f"History summary: {history_summary[:100]}...")
             
-            # Get context from MCP server
+            # Get context from MCP server and available tools
             session = await self._ensure_session()
-            context = await get_context_from_mcp(
+            
+            # Fetch context and tools in parallel
+            context_task = get_context_from_mcp(
                 api_key=MCP_API_KEY,
                 auth_token=auth_token,
                 token_type=token_type,
@@ -242,6 +286,21 @@ class RAGHandler(CustomLogger):
                 history_summary=history_summary,
                 session=session
             )
+            tools_task = get_mcp_tools_from_litellm(session=session) if ENABLE_MCP_TOOLS else None
+            
+            if tools_task:
+                context, mcp_tools = await asyncio.gather(context_task, tools_task, return_exceptions=True)
+            else:
+                context = await context_task
+                mcp_tools = None
+            
+            # Handle exceptions from parallel tasks
+            if isinstance(context, Exception):
+                logger.error(f"Error getting context: {context}")
+                context = None
+            if isinstance(mcp_tools, Exception):
+                logger.error(f"Error getting MCP tools: {mcp_tools}")
+                mcp_tools = None
             
             # Get current date and time for all requests
             current_date = datetime.now().strftime("%A, %B %d, %Y")
@@ -374,9 +433,34 @@ class RAGHandler(CustomLogger):
                 })
                 logger.info("Created new system message with current date")
             
+            # Add MCP tools to the request if available
+            if mcp_tools and len(mcp_tools) > 0:
+                try:
+                    # Use LiteLLM's built-in transformation function
+                    from litellm.experimental_mcp_client.tools import transform_mcp_tool_to_openai_tool
+                    
+                    # Convert MCP tools to OpenAI format using LiteLLM's utility
+                    openai_tools = []
+                    for tool in mcp_tools:
+                        try:
+                            openai_tool = transform_mcp_tool_to_openai_tool(tool)
+                            openai_tools.append(openai_tool)
+                        except Exception as e:
+                            logger.warning(f"Failed to convert MCP tool '{tool.get('name', 'unknown')}' to OpenAI format: {e}")
+                            continue
+                    
+                    if openai_tools:
+                        data["tools"] = openai_tools
+                        data["tool_choice"] = "auto"  # Let the model decide when to use tools
+                        logger.info(f"Added {len(openai_tools)} MCP tools to request")
+                        
+                except ImportError as e:
+                    logger.error(f"Failed to import LiteLLM MCP tools utilities: {e}")
+                    logger.warning("MCP tools integration requires litellm.experimental_mcp_client.tools")
+            
             # Update the request data
             data["messages"] = messages
-            logger.info("Successfully injected current date into request")
+            logger.info("Successfully injected current date and tools into request")
             
         except Exception as e:
             logger.error(f"Error in pre_request_hook: {str(e)}", exc_info=True)

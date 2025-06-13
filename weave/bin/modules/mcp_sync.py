@@ -168,19 +168,44 @@ def delete_mcp_server_in_litellm(litellm_url: str, api_key: str, server_id: str,
         console.print(f"[red]❌ Error deleting MCP server '{server_name}': {e}[/red]")
         return False
 
+def filter_servers_by_scope(servers: Dict[str, Any], target_scope: str = "rag") -> Dict[str, Any]:
+    """Filter MCP servers by scope (rag, agent, or all)"""
+    filtered = {}
+    
+    for server_name, server_config in servers.items():
+        server_scope = server_config.get("scope", "all")
+        
+        # Include server if:
+        # 1. Server scope is "all"
+        # 2. Server scope matches target scope
+        # 3. Target scope is "all" (include everything)
+        if server_scope == "all" or server_scope == target_scope or target_scope == "all":
+            filtered[server_name] = server_config
+    
+    return filtered
+
 def sync_mcp_servers_to_litellm(
     litellm_url: str,
     api_key: str,
     dry_run: bool = False,
     verbose: bool = False
 ) -> bool:
-    """Sync MCP servers from weave config to LiteLLM database"""
+    """Sync MCP servers from weave config to LiteLLM database
     
-    # Get servers from weave config
-    weave_servers = get_mcp_servers_from_config()
+    Only syncs servers with scope 'rag' or 'all'. Servers with scope 'agent' are excluded.
+    """
+    
+    # Get servers from weave config and filter to only include rag and all scopes
+    all_weave_servers = get_mcp_servers_from_config()
+    weave_servers = filter_servers_by_scope(all_weave_servers, "rag")  # This includes "rag" and "all" scoped servers
+    
+    if not all_weave_servers:
+        console.print("[yellow]No MCP servers configured in weave config[/yellow]")
+        return True
     
     if not weave_servers:
-        console.print("[yellow]No MCP servers configured in weave config[/yellow]")
+        console.print("[yellow]No MCP servers configured for RAG workflows (scope 'rag' or 'all')[/yellow]")
+        console.print(f"[blue]Total servers in config: {len(all_weave_servers)}[/blue]")
         return True
     
     if dry_run:
@@ -192,7 +217,8 @@ def sync_mcp_servers_to_litellm(
     existing_by_name = {server.get("alias", ""): server for server in existing_servers}
     
     if verbose or dry_run:
-        console.print(f"[blue]📋 Weave config servers: {len(weave_servers)}[/blue]")
+        console.print(f"[blue]📋 Weave config servers (all): {len(all_weave_servers)}[/blue]")
+        console.print(f"[blue]📋 Weave config servers (rag + all): {len(weave_servers)}[/blue]")
         console.print(f"[blue]📋 LiteLLM database servers: {len(existing_servers)}[/blue]")
         console.print()
     
@@ -256,7 +282,10 @@ def init_mcp_servers(
     wait_for_service: bool = False,
     verbose: bool = False
 ) -> bool:
-    """Initialize MCP servers on startup"""
+    """Initialize MCP servers on startup
+    
+    Only syncs servers with scope 'rag' or 'all'. Servers with scope 'agent' are excluded.
+    """
     
     if wait_for_service:
         if not wait_for_litellm_service(litellm_url):
@@ -280,5 +309,5 @@ def init_mcp_servers(
         console.print(f"[red]❌ Cannot connect to LiteLLM service: {e}[/red]")
         return False
     
-    # Sync servers
+    # Sync servers (only rag and all scopes)
     return sync_mcp_servers_to_litellm(litellm_url, api_key, dry_run=False, verbose=verbose) 

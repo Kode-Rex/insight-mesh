@@ -54,6 +54,7 @@ def add_mcp_server_to_config(
     spec_version: str = "2024-11-05",
     description: str = "",
     env_vars: Optional[Dict[str, str]] = None,
+    scope: str = "all",
     force: bool = False
 ) -> bool:
     """Add an MCP server to the weave configuration"""
@@ -68,12 +69,19 @@ def add_mcp_server_to_config(
         console.print(f"[yellow]MCP server '{server_name}' already exists. Use --force to overwrite.[/yellow]")
         return False
     
+    # Validate scope
+    valid_scopes = ["rag", "agent", "all"]
+    if scope not in valid_scopes:
+        console.print(f"[red]Invalid scope '{scope}'. Must be one of: {', '.join(valid_scopes)}[/red]")
+        return False
+    
     # Create server configuration
     server_config = {
         "url": url,
         "transport": transport,
         "spec_version": spec_version,
-        "description": description
+        "description": description,
+        "scope": scope
     }
     
     # Add auth_type if provided
@@ -121,6 +129,7 @@ def list_mcp_servers_from_config(verbose: bool = False) -> Dict[str, Any]:
     table.add_column("Server Name", style="cyan", no_wrap=True)
     table.add_column("URL", style="blue")
     table.add_column("Transport", style="green")
+    table.add_column("Scope", style="magenta")
     table.add_column("Description", style="yellow")
     
     if verbose:
@@ -131,9 +140,10 @@ def list_mcp_servers_from_config(verbose: bool = False) -> Dict[str, Any]:
     for server_name, server_config in servers.items():
         url = server_config.get("url", "N/A")
         transport = server_config.get("transport", "sse")
+        scope = server_config.get("scope", "all")
         description = server_config.get("description", "No description")
         
-        row_data = [server_name, url, transport, description]
+        row_data = [server_name, url, transport, scope, description]
         
         if verbose:
             auth_type = server_config.get("auth_type", "none")
