@@ -63,13 +63,17 @@ def create_mcp_server_in_litellm(
         
         # Convert weave config format to LiteLLM format
         litellm_config = {
-            "server_name": server_name,
+            "alias": server_name,
             "url": server_config["url"],
             "description": server_config.get("description", f"MCP server: {server_name}"),
             "env": server_config.get("env", {}),
             "transport": server_config.get("transport", "sse"),
             "spec_version": server_config.get("spec_version", "2024-11-05")
         }
+        
+        # Add auth_type if specified
+        if "auth_type" in server_config:
+            litellm_config["auth_type"] = server_config["auth_type"]
         
         response = requests.post(
             f"{litellm_url}/v1/mcp/server",
@@ -109,13 +113,17 @@ def update_mcp_server_in_litellm(
         # Convert weave config format to LiteLLM format
         litellm_config = {
             "server_id": server_id,
-            "server_name": server_name,
+            "alias": server_name,
             "url": server_config["url"],
             "description": server_config.get("description", f"MCP server: {server_name}"),
             "env": server_config.get("env", {}),
             "transport": server_config.get("transport", "sse"),
             "spec_version": server_config.get("spec_version", "2024-11-05")
         }
+        
+        # Add auth_type if specified
+        if "auth_type" in server_config:
+            litellm_config["auth_type"] = server_config["auth_type"]
         
         response = requests.put(
             f"{litellm_url}/v1/mcp/server",
@@ -181,7 +189,7 @@ def sync_mcp_servers_to_litellm(
     
     # Get existing servers from LiteLLM
     existing_servers = get_existing_mcp_servers(litellm_url, api_key)
-    existing_by_name = {server.get("server_name", ""): server for server in existing_servers}
+    existing_by_name = {server.get("alias", ""): server for server in existing_servers}
     
     if verbose or dry_run:
         console.print(f"[blue]📋 Weave config servers: {len(weave_servers)}[/blue]")
@@ -227,7 +235,7 @@ def sync_mcp_servers_to_litellm(
     
     # Remove servers that exist in LiteLLM but not in weave config
     for existing_server in existing_servers:
-        server_name = existing_server.get("server_name", "")
+        server_name = existing_server.get("alias", "")
         server_id = existing_server.get("server_id", "")
         
         if server_name and server_name not in weave_servers:

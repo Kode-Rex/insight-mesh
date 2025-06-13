@@ -50,6 +50,7 @@ def add_mcp_server_to_config(
     server_name: str,
     url: str,
     transport: str = "sse",
+    auth_type: Optional[str] = None,
     spec_version: str = "2024-11-05",
     description: str = "",
     env_vars: Optional[Dict[str, str]] = None,
@@ -74,6 +75,10 @@ def add_mcp_server_to_config(
         "spec_version": spec_version,
         "description": description
     }
+    
+    # Add auth_type if provided
+    if auth_type:
+        server_config["auth_type"] = auth_type
     
     # Add environment variables if provided
     if env_vars:
@@ -119,6 +124,7 @@ def list_mcp_servers_from_config(verbose: bool = False) -> Dict[str, Any]:
     table.add_column("Description", style="yellow")
     
     if verbose:
+        table.add_column("Auth Type", style="red")
         table.add_column("Spec Version", style="magenta")
         table.add_column("Environment Variables", style="dim")
     
@@ -130,10 +136,11 @@ def list_mcp_servers_from_config(verbose: bool = False) -> Dict[str, Any]:
         row_data = [server_name, url, transport, description]
         
         if verbose:
+            auth_type = server_config.get("auth_type", "none")
             spec_version = server_config.get("spec_version", "N/A")
             env_vars = server_config.get("env", {})
             env_display = f"{len(env_vars)} vars" if env_vars else "None"
-            row_data.extend([spec_version, env_display])
+            row_data.extend([auth_type, spec_version, env_display])
         
         table.add_row(*row_data)
     

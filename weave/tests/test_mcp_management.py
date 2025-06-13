@@ -145,6 +145,30 @@ class TestMCPConfig(unittest.TestCase):
     
     @patch('modules.mcp_config.load_weave_config')
     @patch('modules.mcp_config.save_weave_config')
+    def test_add_mcp_server_with_auth_type(self, mock_save, mock_load):
+        """Test adding an MCP server with auth_type"""
+        mock_load.return_value = self.empty_config.copy()
+        mock_save.return_value = True
+        
+        result = add_mcp_server_to_config(
+            server_name="secure-api",
+            url="https://api.example.com/mcp",
+            auth_type="bearer_token",
+            description="Secure API server",
+            env_vars={"BEARER_TOKEN": "secret123"}
+        )
+        
+        self.assertTrue(result)
+        mock_save.assert_called_once()
+        
+        # Check the config that was saved
+        saved_config = mock_save.call_args[0][0]
+        server_config = saved_config["mcp_servers"]["secure-api"]
+        self.assertEqual(server_config["auth_type"], "bearer_token")
+        self.assertEqual(server_config["env"]["BEARER_TOKEN"], "secret123")
+    
+    @patch('modules.mcp_config.load_weave_config')
+    @patch('modules.mcp_config.save_weave_config')
     def test_remove_mcp_server_success(self, mock_save, mock_load):
         """Test successful removal of MCP server"""
         mock_load.return_value = self.test_config.copy()
@@ -205,7 +229,7 @@ class TestMCPSync(unittest.TestCase):
         self.litellm_response = [
             {
                 "server_id": "test-id-123",
-                "server_name": "webcat",
+                "alias": "webcat",
                 "url": "http://webcat:8765/mcp",
                 "description": "Test WebCat server"
             }
@@ -275,9 +299,38 @@ class TestMCPSync(unittest.TestCase):
         # Check the request payload
         call_args = mock_post.call_args
         payload = call_args[1]['json']
-        self.assertEqual(payload['server_name'], 'webcat')
+        self.assertEqual(payload['alias'], 'webcat')
         self.assertEqual(payload['url'], 'http://webcat:8765/mcp')
         self.assertEqual(payload['transport'], 'sse')
+    
+    @patch('requests.post')
+    def test_create_mcp_server_with_auth_type(self, mock_post):
+        """Test successful creation of MCP server with auth_type"""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+        
+        server_config = {
+            "url": "https://api.example.com/mcp",
+            "transport": "sse",
+            "spec_version": "2024-11-05",
+            "description": "Secure API server",
+            "auth_type": "bearer_token",
+            "env": {"BEARER_TOKEN": "secret123"}
+        }
+        
+        result = create_mcp_server_in_litellm(
+            "http://test:4000", "test-key", "secure-api", server_config
+        )
+        
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        
+        # Check the request payload includes auth_type
+        call_args = mock_post.call_args
+        payload = call_args[1]['json']
+        self.assertEqual(payload['alias'], 'secure-api')
+        self.assertEqual(payload['auth_type'], 'bearer_token')
     
     @patch('requests.post')
     def test_create_mcp_server_error(self, mock_post):

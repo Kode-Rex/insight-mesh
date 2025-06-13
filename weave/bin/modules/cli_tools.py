@@ -306,13 +306,14 @@ tool_group.add_command(tool_server)
 @tool_server.command('add')
 @click.argument('server_name')
 @click.argument('url')
-@click.option('--transport', default='sse', help='Transport type (sse, stdio)')
+@click.option('--transport', default='sse', type=click.Choice(['sse', 'http']), help='Transport type (sse or http)')
+@click.option('--auth-type', type=click.Choice(['none', 'api_key', 'bearer_token', 'basic']), help='Authentication type')
 @click.option('--spec-version', default='2024-11-05', help='MCP spec version')
 @click.option('--description', help='Server description')
 @click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
 @click.option('--force', '-f', is_flag=True, help='Overwrite existing server')
 @click.pass_context
-def tool_server_add(ctx, server_name, url, transport, spec_version, description, env, force):
+def tool_server_add(ctx, server_name, url, transport, auth_type, spec_version, description, env, force):
     """Add MCP server to weave config
     
     Examples:
@@ -322,6 +323,9 @@ def tool_server_add(ctx, server_name, url, transport, spec_version, description,
     
     Add with environment variables:
     weave tool server add webcat http://webcat:8765/mcp --env API_KEY=secret --env TIMEOUT=30
+    
+    Add with authentication:
+    weave tool server add secure-api https://api.example.com/mcp --auth-type bearer_token --env BEARER_TOKEN=your-token
     """
     from .mcp_config import add_mcp_server_to_config
     
@@ -338,6 +342,7 @@ def tool_server_add(ctx, server_name, url, transport, spec_version, description,
         server_name=server_name,
         url=url,
         transport=transport,
+        auth_type=auth_type,
         spec_version=spec_version,
         description=description or f"MCP server at {url}",
         env_vars=env_dict,
