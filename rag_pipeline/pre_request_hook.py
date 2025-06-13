@@ -40,6 +40,7 @@ from typing import Optional, Literal, Dict, Any, List
 import json
 import aiohttp
 import asyncio
+from datetime import datetime
 
 # MCP Server configuration
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
@@ -242,7 +243,10 @@ class RAGHandler(CustomLogger):
                 session=session
             )
             
-            # Only modify the request if we got valid context
+            # Get current date and time for all requests
+            current_date = datetime.now().strftime("%A, %B %d, %Y")
+            
+            # Check if we got valid context from MCP
             if context and context.get("context_items"):
                 logger.info(f"Got {len(context['context_items'])} context items from MCP")
                 # Build the context string from context items
@@ -280,6 +284,7 @@ class RAGHandler(CustomLogger):
                 
                 # Create a system message that instructs the model to cite sources with URLs
                 system_message = (
+                    f"The current date is {current_date}.\n\n"
                     "You are a helpful assistant that MUST cite sources in EVERY response. "
                     "IMPORTANT: You MUST explicitly mention which documents you used in your answer. "
                     "Format your response like this:\n\n"
@@ -291,25 +296,36 @@ class RAGHandler(CustomLogger):
                     "REMEMBER: You MUST cite your sources in EVERY response. If you don't cite sources, your response is incomplete."
                 )
                 
-                # Find or create system message
-                system_messages = [msg for msg in messages if msg.get("role") == "system"]
-                if system_messages:
-                    # Update the system message with context
-                    system_messages[0]["content"] = system_message
-                    logger.info("Updated existing system message with context")
-                else:
-                    # Create new system message with context
-                    messages.insert(0, {
-                        "role": "system",
-                        "content": system_message
-                    })
-                    logger.info("Created new system message with context")
-                
-                # Update the request data
-                data["messages"] = messages
-                logger.info("Successfully injected context into request")
+                logger.info("Created system message with MCP context and current date")
             else:
-                logger.info("No context items received from MCP")
+                logger.info("No context items received from MCP, creating basic system message with date")
+                # Create a basic system message with just the current date
+                system_message = f"The current date is {current_date}."
+            
+            # Find or create system message
+            system_messages = [msg for msg in messages if msg.get("role") == "system"]
+            if system_messages:
+                # Check if existing system message already has date info
+                existing_content = system_messages[0]["content"]
+                if "The current date is" not in existing_content:
+                    # Prepend date to existing system message
+                    system_messages[0]["content"] = f"The current date is {current_date}.\n\n{existing_content}"
+                    logger.info("Added current date to existing system message")
+                elif context and context.get("context_items"):
+                    # Update the system message with context (already includes date)
+                    system_messages[0]["content"] = system_message
+                    logger.info("Updated existing system message with context and date")
+            else:
+                # Create new system message
+                messages.insert(0, {
+                    "role": "system",
+                    "content": system_message
+                })
+                logger.info("Created new system message with current date")
+            
+            # Update the request data
+            data["messages"] = messages
+            logger.info("Successfully injected current date into request")
             
         except Exception as e:
             logger.error(f"Error in pre_request_hook: {str(e)}", exc_info=True)
