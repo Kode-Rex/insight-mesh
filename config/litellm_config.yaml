@@ -59,4 +59,7 @@ litellm_settings:
 # MCP servers configuration for web search tool
 mcp_servers:
   web_search:
-    url: "http://localhost:8765/search/sk-abc-123-def-456/sse"
+    url: "http://webcat:8765/mcp"
+    transport: "sse"  # optional, defaults to "sse"
+    spec_version: "2024-11-05"  # optional, defaults to "2025-03-26"
+    description: "WebCat MCP Server - For Web Search"  # optional
