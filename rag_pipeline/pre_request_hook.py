@@ -282,18 +282,69 @@ class RAGHandler(CustomLogger):
                 context_str = "\n\n".join(context_parts)
                 logger.info(f"Context string length: {len(context_str)}")
                 
+                # Build a list of valid sources with proper formatting for citation examples
+                citation_examples = []
+                valid_sources = []
+                
+                for item in context["context_items"]:
+                    item_metadata = item.get("metadata", {})
+                    source = item_metadata.get("source", "unknown")
+                    url = item_metadata.get("url")
+                    file_name = item_metadata.get("file_name")
+                    
+                    # Skip system context for citation examples
+                    if source == "system_context":
+                        continue
+                    
+                    # Create a proper source name
+                    if file_name:
+                        source_name = file_name
+                    elif source and source != "unknown":
+                        source_name = source.replace("_", " ").title()
+                    else:
+                        source_name = "Document"
+                    
+                    # Include all sources, with URL if available
+                    if url:
+                        citation_examples.append(f"- [{source_name}]({url})")
+                        valid_sources.append({"name": source_name, "url": url})
+                    else:
+                        citation_examples.append(f"- {source_name}")
+                        valid_sources.append({"name": source_name, "url": None})
+                
+                # Create citation examples text
+                if citation_examples:
+                    examples_text = "Available sources for citation:\n" + "\n".join(citation_examples[:5])  # Limit to 5 examples
+                else:
+                    examples_text = "No specific sources available for citation."
+                
                 # Create a system message that instructs the model to cite sources with URLs
                 system_message = (
                     f"The current date is {current_date}.\n\n"
-                    "You are a helpful assistant that MUST cite sources in EVERY response. "
-                    "IMPORTANT: You MUST explicitly mention which documents you used in your answer. "
-                    "Format your response like this:\n\n"
-                    "1. First, provide your answer\n"
-                    "2. Then, on a new line, write 'Sources used:' followed by a list of the document sources you referenced\n"
-                    "3. If the source has a URL, include it after the source name using the format: [Source Name](URL)\n\n"
+                    "You are a helpful assistant that MUST cite sources in EVERY response when using provided context.\n\n"
+                    "## SOURCE CITATION REQUIREMENTS:\n"
+                    "1. You MUST cite sources for any information you use from the provided documents\n"
+                    "2. Use ONLY the exact source names and URLs provided below\n"
+                    "3. Do NOT make up or modify URLs - only use valid URLs that are provided\n\n"
+                    "## CITATION FORMAT:\n"
+                    "End your response with a 'Sources:' section using this exact format:\n\n"
+                    "**Sources:**\n"
+                    "- [Document Name](URL) - if URL is available\n"
+                    "- Document Name - if no URL is available\n\n"
+                    "## CITATION EXAMPLES:\n"
+                    "**Sources:**\n"
+                    "- [Company Policy Manual](https://docs.company.com/policies)\n"
+                    "- Meeting Notes - March 2024\n"
+                    "- [Technical Documentation](https://wiki.company.com/tech-docs)\n\n"
+                    f"## {examples_text}\n\n"
+                    "## CONTEXT DOCUMENTS:\n"
                     "Here are the relevant documents to help answer the user's question:\n\n"
                     f"{context_str}\n\n"
-                    "REMEMBER: You MUST cite your sources in EVERY response. If you don't cite sources, your response is incomplete."
+                    "## IMPORTANT REMINDERS:\n"
+                    "- ALWAYS include a 'Sources:' section when using information from the provided documents\n"
+                    "- Use the EXACT source names and URLs provided above\n"
+                    "- Do NOT create or modify URLs\n"
+                    "- If you cannot find relevant information in the provided sources, say so clearly"
                 )
                 
                 logger.info("Created system message with MCP context and current date")
