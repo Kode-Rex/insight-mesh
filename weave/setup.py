@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="weave",
-    version="0.1.2",
+    version="0.1.5",
     description="A Rails-like framework for rapidly building and deploying enterprise-grade GenAI applications",
     packages=find_packages(),
     install_requires=[
