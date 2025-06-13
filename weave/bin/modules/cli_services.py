@@ -280,4 +280,75 @@ def service_restart(ctx, services):
     
     run_service_restart_with_feedback(command, project_name, verbose)
 
+@service_group.command('update')
+@click.argument('services', nargs=-1, required=True)
+@click.option('--no-restart', is_flag=True, help='Pull images but do not restart services')
+@click.pass_context
+def service_update(ctx, services, no_restart):
+    """Pull latest Docker images for services and restart them"""
+    project_name = get_project_name()
+    verbose = ctx.obj.get('VERBOSE', False)
+    test_mode = ctx.obj.get('TEST_MODE', False)
+    
+    if not services:
+        console.print("[red]Error: Please specify at least one service to update[/red]")
+        console.print("[blue]Usage: weave service update <service1> [service2] ...[/blue]")
+        return
+    
+    # Translate service names from config to Docker Compose names
+    docker_services = []
+    for service in services:
+        docker_service = get_docker_service_name(service, project_name)
+        docker_services.append(docker_service)
+        if verbose and docker_service != service:
+            console.print(f"[blue]Translating '{service}' to '{docker_service}'[/blue]")
+    
+    # Step 1: Pull latest images
+    console.print(f"[bold blue]Pulling latest images for: {', '.join(services)}[/bold blue]")
+    
+    pull_command = ['docker', 'compose', '-p', project_name, 'pull'] + docker_services
+    
+    if verbose:
+        console.print(f"[blue]Running: {' '.join(pull_command)}[/blue]")
+    
+    if test_mode:
+        console.print("[yellow]🧪 TEST MODE: Would pull images[/yellow]")
+        console.print(f"[yellow]Command: {' '.join(pull_command)}[/yellow]")
+    else:
+        try:
+            result = subprocess.run(pull_command, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                console.print(f"[red]Error pulling images:[/red] {result.stderr}")
+                return
+            
+            # Show pull output
+            if result.stdout.strip():
+                console.print(result.stdout.strip())
+            
+            console.print(f"[green]✓ Successfully pulled latest images for: {', '.join(services)}[/green]")
+            
+        except Exception as e:
+            console.print(f"[red]Error pulling images: {str(e)}[/red]")
+            return
+    
+    # Step 2: Restart services (unless --no-restart is specified)
+    if not no_restart:
+        console.print(f"[bold blue]Restarting services with new images...[/bold blue]")
+        
+        # Use the existing restart functionality
+        restart_command = ['docker', 'compose', '-p', project_name, 'up', '-d'] + docker_services
+        
+        if verbose:
+            console.print(f"[blue]Running: {' '.join(restart_command)}[/blue]")
+        
+        if test_mode:
+            console.print("[yellow]🧪 TEST MODE: Would restart services[/yellow]")
+            console.print(f"[yellow]Command: {' '.join(restart_command)}[/yellow]")
+        else:
+            run_service_up_with_feedback(restart_command, project_name, verbose)
+    else:
+        console.print("[blue]Skipping service restart (--no-restart specified)[/blue]")
+        console.print(f"[blue]Run 'weave service restart {' '.join(services)}' to restart with new images[/blue]")
+
  
