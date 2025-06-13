@@ -469,6 +469,93 @@ class RAGHandler(CustomLogger):
         
         return data
 
+    async def async_post_call_success_hook(
+        self,
+        user_api_key_dict,
+        response_obj,
+        start_time: float,
+        end_time: float
+    ):
+        """Handle tool calls in LLM responses"""
+        # Check if MCP tool execution is enabled
+        enable_mcp_tools = os.environ.get("ENABLE_MCP_TOOL_EXECUTION", "true").lower() == "true"
+        if not enable_mcp_tools:
+            return response_obj
+            
+        logger.info("=== MCP TOOL HANDLER POST-RESPONSE ===")
+        logger.info(f"Response received in {end_time - start_time:.2f}s")
+        
+        try:
+            # Check if response has tool calls
+            if hasattr(response_obj, 'choices') and response_obj.choices:
+                message = response_obj.choices[0].message
+                
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    logger.info(f"Found {len(message.tool_calls)} tool calls to execute")
+                    
+                    # Execute each tool call
+                    tool_results = []
+                    for tool_call in message.tool_calls:
+                        try:
+                            result = await self._execute_mcp_tool_call(tool_call)
+                            tool_results.append({
+                                "tool_call_id": tool_call.id,
+                                "result": result
+                            })
+                        except Exception as e:
+                            logger.error(f"Failed to execute tool call {tool_call.id}: {e}")
+                            tool_results.append({
+                                "tool_call_id": tool_call.id,
+                                "error": str(e)
+                            })
+                    
+                    # Add tool results to response metadata
+                    if not hasattr(response_obj, 'metadata'):
+                        response_obj.metadata = {}
+                    response_obj.metadata['tool_results'] = tool_results
+                    
+                    logger.info(f"Executed {len(tool_results)} tool calls")
+            
+        except Exception as e:
+            logger.error(f"Error in post-response hook: {str(e)}", exc_info=True)
+        
+        return response_obj
+    
+    async def _execute_mcp_tool_call(self, tool_call):
+        """Execute a single tool call on MCP server"""
+        try:
+            # Import the transformation function lazily
+            try:
+                from litellm.experimental_mcp_client.tools import transform_openai_tool_call_request_to_mcp_tool_call_request
+            except ImportError:
+                logger.error("litellm.experimental_mcp_client.tools not available - MCP tool execution disabled")
+                raise Exception("MCP tool execution requires litellm.experimental_mcp_client.tools")
+            
+            # Convert OpenAI tool call to MCP format
+            mcp_call = transform_openai_tool_call_request_to_mcp_tool_call_request(
+                openai_tool=tool_call.model_dump()
+            )
+            
+            logger.info(f"Executing MCP tool: {mcp_call.name} with args: {mcp_call.arguments}")
+            
+            # Get MCP client and execute tool
+            mcp_server_url = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
+            
+            # Use fastmcp client to execute the tool
+            from fastmcp import Client
+            async with Client(mcp_server_url) as client:
+                result = await client.call_tool(
+                    name=mcp_call.name, 
+                    arguments=mcp_call.arguments
+                )
+            
+            logger.info(f"Tool execution result: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error executing tool call: {e}")
+            raise
+
     async def __aenter__(self):
         await self._ensure_session()
         return self
