@@ -123,8 +123,6 @@ def tool_remove(ctx, server_name, yes):
     
     remove_tool(server_name)
 
-
-
 @tool_group.command('list')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
 @click.pass_context
@@ -247,4 +245,178 @@ def tool_config(ctx, path, show):
             console.print(f"[red]Failed to update MCP configuration path[/red]")
     else:
         console.print("[yellow]Use --path to set the MCP configuration path or --show to display current path[/yellow]")
-        console.print("[yellow]Example: weave tool config --path ~/.cursor/mcp.json[/yellow]") 
+        console.print("[yellow]Example: weave tool config --path ~/.cursor/mcp.json[/yellow]")
+
+@tool_group.command('sync')
+@click.option('--litellm-url', default='http://localhost:4000', help='LiteLLM proxy URL')
+@click.option('--api-key', help='LiteLLM API key (defaults to sk-litellm-master-key-123456)')
+@click.option('--dry-run', is_flag=True, help='Show what would be synced without doing it')
+@click.pass_context
+def tool_sync(ctx, litellm_url, api_key, dry_run):
+    """Sync MCP servers from weave config to LiteLLM database
+    
+    This command reads MCP server configurations from .weave/config.json
+    and creates/updates them in the LiteLLM proxy database via API.
+    
+    Examples:
+    
+    Sync all MCP servers:
+    weave tool sync
+    
+    Sync with custom LiteLLM URL:
+    weave tool sync --litellm-url http://litellm:4000
+    
+    Preview what would be synced:
+    weave tool sync --dry-run
+    """
+    from .mcp_sync import sync_mcp_servers_to_litellm
+    
+    # Default API key
+    if not api_key:
+        api_key = "sk-litellm-master-key-123456"
+    
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    success = sync_mcp_servers_to_litellm(
+        litellm_url=litellm_url,
+        api_key=api_key,
+        dry_run=dry_run,
+        verbose=verbose
+    )
+    
+    if success:
+        if dry_run:
+            console.print("[green]✅ Sync preview completed[/green]")
+        else:
+            console.print("[green]✅ MCP servers synced successfully[/green]")
+    else:
+        console.print("[red]❌ Sync failed[/red]")
+        ctx.exit(1)
+
+@click.group('server', invoke_without_command=True)
+@click.pass_context
+def tool_server(ctx):
+    """Manage MCP servers in weave config"""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+# Add the server group to the tool group
+tool_group.add_command(tool_server)
+
+@tool_server.command('add')
+@click.argument('server_name')
+@click.argument('url')
+@click.option('--transport', default='sse', help='Transport type (sse, stdio)')
+@click.option('--spec-version', default='2024-11-05', help='MCP spec version')
+@click.option('--description', help='Server description')
+@click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing server')
+@click.pass_context
+def tool_server_add(ctx, server_name, url, transport, spec_version, description, env, force):
+    """Add MCP server to weave config
+    
+    Examples:
+    
+    Add WebCat server:
+    weave tool server add webcat http://webcat:8765/mcp --description "Web search tool"
+    
+    Add with environment variables:
+    weave tool server add webcat http://webcat:8765/mcp --env API_KEY=secret --env TIMEOUT=30
+    """
+    from .mcp_config import add_mcp_server_to_config
+    
+    # Parse environment variables
+    env_dict = {}
+    for env_var in env:
+        if '=' not in env_var:
+            console.print(f"[red]Invalid environment variable format: {env_var}. Use KEY=VALUE[/red]")
+            return
+        key, value = env_var.split('=', 1)
+        env_dict[key] = value
+    
+    success = add_mcp_server_to_config(
+        server_name=server_name,
+        url=url,
+        transport=transport,
+        spec_version=spec_version,
+        description=description or f"MCP server at {url}",
+        env_vars=env_dict,
+        force=force
+    )
+    
+    if success:
+        console.print(f"[green]✅ Added MCP server '{server_name}' to weave config[/green]")
+        console.print("[blue]💡 Run 'weave tool sync' to push to LiteLLM database[/blue]")
+    else:
+        console.print(f"[red]❌ Failed to add MCP server '{server_name}'[/red]")
+
+@tool_server.command('remove')
+@click.argument('server_name')
+@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
+@click.pass_context
+def tool_server_remove(ctx, server_name, yes):
+    """Remove MCP server from weave config"""
+    from .mcp_config import remove_mcp_server_from_config
+    
+    if not yes:
+        if not click.confirm(f"Are you sure you want to remove MCP server '{server_name}'?"):
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+    
+    success = remove_mcp_server_from_config(server_name)
+    
+    if success:
+        console.print(f"[green]✅ Removed MCP server '{server_name}' from weave config[/green]")
+        console.print("[blue]💡 Run 'weave tool sync' to update LiteLLM database[/blue]")
+    else:
+        console.print(f"[red]❌ Failed to remove MCP server '{server_name}'[/red]")
+
+@tool_server.command('list')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
+@click.pass_context
+def tool_server_list(ctx, verbose):
+    """List MCP servers in weave config"""
+    from .mcp_config import list_mcp_servers_from_config
+    
+    verbose_flag = ctx.obj.get('VERBOSE', False) or verbose
+    list_mcp_servers_from_config(verbose=verbose_flag)
+
+@tool_group.command('init')
+@click.option('--litellm-url', default='http://localhost:4000', help='LiteLLM proxy URL')
+@click.option('--api-key', help='LiteLLM API key (defaults to sk-litellm-master-key-123456)')
+@click.option('--wait-for-service', is_flag=True, help='Wait for LiteLLM service to be ready')
+@click.pass_context
+def tool_init(ctx, litellm_url, api_key, wait_for_service):
+    """Initialize MCP servers on startup
+    
+    This command is designed to be run on container startup to ensure
+    MCP servers from weave config are synced to LiteLLM database.
+    
+    Examples:
+    
+    Initialize MCP servers:
+    weave tool init
+    
+    Wait for LiteLLM to be ready first:
+    weave tool init --wait-for-service
+    """
+    from .mcp_sync import init_mcp_servers
+    
+    # Default API key
+    if not api_key:
+        api_key = "sk-litellm-master-key-123456"
+    
+    verbose = ctx.obj.get('VERBOSE', False)
+    
+    success = init_mcp_servers(
+        litellm_url=litellm_url,
+        api_key=api_key,
+        wait_for_service=wait_for_service,
+        verbose=verbose
+    )
+    
+    if success:
+        console.print("[green]✅ MCP servers initialized successfully[/green]")
+    else:
+        console.print("[red]❌ MCP initialization failed[/red]")
+        ctx.exit(1) 

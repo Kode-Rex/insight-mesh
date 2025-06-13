@@ -246,10 +246,50 @@ jobs:
     - name: Run MCP client test
       run: |
         python -m pytest test_mcp.py -v
+
+  test-weave-cli:
+    runs-on: ubuntu-latest
+    
+    env:
+      WEAVE_TEST_MODE: true
+      LITELLM_URL: http://localhost:4000
+      LITELLM_API_KEY: sk-test-key-123456
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install weave dependencies
+      working-directory: ./weave
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+        
+    - name: Run weave MCP management tests
+      working-directory: ./weave
+      run: |
+        python run_tests.py --mcp-only
+        
+    - name: Run weave tests with coverage
+      working-directory: ./weave
+      run: |
+        python -m pytest tests/ -v --cov=bin/modules --cov-report=xml:coverage-weave.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./weave/coverage-weave.xml
+        flags: weave
+        fail_ci_if_error: false
         
   # This job will only run when all required test jobs succeed
   test-summary:
-    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client]
+    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client, test-weave-cli]
     runs-on: ubuntu-latest
     steps:
       - name: Tests Passed

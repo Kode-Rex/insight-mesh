@@ -29,6 +29,18 @@
             }
         }
     },
+    "mcp_servers": {
+        "webcat": {
+            "url": "http://webcat:8765/mcp",
+            "transport": "sse",
+            "spec_version": "2024-11-05",
+            "description": "WebCat MCP Server - For Web Search",
+            "env": {
+                "WEBCAT_API_KEY": "${WEBCAT_API_KEY}",
+                "SERPER_API_KEY": "${SERPER_API_KEY}"
+            }
+        }
+    },
     "services": {
         "caddy": {
             "display_name": "Caddy",

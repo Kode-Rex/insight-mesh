@@ -56,10 +56,6 @@ litellm_settings:
   callbacks: rag_pipeline.pre_request_hook.rag_handler_instance
   forward_client_headers_to_llm_api: true
 
-# MCP servers configuration for web search tool
-mcp_servers:
-  web_search:
-    url: "http://webcat:8765/mcp"
-    transport: "sse"  # optional, defaults to "sse"
-    spec_version: "2024-11-05"  # optional, defaults to "2025-03-26"
-    description: "WebCat MCP Server - For Web Search"  # optional
+# Note: LiteLLM Proxy does not load MCP servers from config.yaml
+# MCP servers must be configured via the Admin UI at /ui/?page=mcp-servers
+# or via the REST API at /v1/mcp/server
