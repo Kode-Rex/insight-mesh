@@ -4,12 +4,19 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 sys.path.insert(0, "/app")
 
 import logging
-from litellm.integrations.custom_logger import CustomLogger
-from litellm.proxy.proxy_server import UserAPIKeyAuth, DualCache
 from typing import Optional, Literal, Dict, Any, List
 import json
 import asyncio
-from fastmcp import Client
+
+# Lazy imports to avoid startup issues
+def get_litellm_imports():
+    from litellm.integrations.custom_logger import CustomLogger
+    from litellm.proxy.proxy_server import UserAPIKeyAuth, DualCache
+    return CustomLogger, UserAPIKeyAuth, DualCache
+
+def get_fastmcp_client():
+    from fastmcp import Client
+    return Client
 
 # Create logger
 logger = logging.getLogger("mcp_tool_handler")
@@ -28,6 +35,9 @@ logger.info("!!! MCP TOOL HANDLER MODULE LOADED !!!")
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
 ENABLE_MCP_TOOL_EXECUTION = os.environ.get("ENABLE_MCP_TOOL_EXECUTION", "true").lower() == "true"
 
+# Get the CustomLogger class
+CustomLogger, UserAPIKeyAuth, DualCache = get_litellm_imports()
+
 class MCPToolHandler(CustomLogger):
     def __init__(self):
         self.mcp_client = None
@@ -36,6 +46,7 @@ class MCPToolHandler(CustomLogger):
     async def _get_mcp_client(self):
         """Get or create MCP client connection"""
         if self.mcp_client is None:
+            Client = get_fastmcp_client()
             self.mcp_client = Client(MCP_SERVER_URL)
             await self.mcp_client.__aenter__()
             logger.info(f"Created MCP client connection to {MCP_SERVER_URL}")
@@ -43,7 +54,7 @@ class MCPToolHandler(CustomLogger):
     
     async def async_post_call_success_hook(
         self,
-        user_api_key_dict: UserAPIKeyAuth,
+        user_api_key_dict,  # Remove type hint to avoid import issues
         response_obj: Any,
         start_time: float,
         end_time: float
