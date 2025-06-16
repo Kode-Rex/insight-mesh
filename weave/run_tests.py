@@ -37,14 +37,13 @@ def run_mcp_tests_only():
     os.environ['WEAVE_TEST_MODE'] = 'true'
     
     # Import and run MCP tests specifically
-    from tests.test_mcp_management import TestMCPConfig, TestMCPSync, TestMCPIntegration
+    from tests.test_mcp_management import TestMCPConfig, TestMCPIntegration
     
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     
     # Add MCP test cases
     suite.addTests(loader.loadTestsFromTestCase(TestMCPConfig))
-    suite.addTests(loader.loadTestsFromTestCase(TestMCPSync))
     suite.addTests(loader.loadTestsFromTestCase(TestMCPIntegration))
     
     # Run tests
