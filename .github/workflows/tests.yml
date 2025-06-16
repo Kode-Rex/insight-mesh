@@ -36,7 +36,11 @@ jobs:
     - name: Run Slack bot tests
       working-directory: ./slack-bot
       run: |
-        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-slack-bot.xml
+        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-slack-bot.xml > test_output.txt 2>&1
+        
+        # Extract test count and create summary
+        TEST_COUNT=$(grep -o '[0-9]\+ passed' test_output.txt | head -1 | grep -o '[0-9]\+' || echo "0")
+        echo '{"component": "Slack Bot", "tests": '${TEST_COUNT}', "status": "✅"}' > test-summary.json
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -50,6 +54,12 @@ jobs:
       with:
         name: coverage-slack-bot
         path: ./slack-bot/coverage-slack-bot.xml
+        
+    - name: Upload test summary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-summary-slack-bot
+        path: ./slack-bot/test-summary.json
         
   test-mcp-server:
     runs-on: ubuntu-latest
@@ -80,7 +90,11 @@ jobs:
     - name: Run MCP server tests
       working-directory: ./mcp-server
       run: |
-        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-mcp.xml
+        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-mcp.xml > test_output.txt 2>&1
+        
+        # Extract test count and create summary
+        TEST_COUNT=$(grep -o '[0-9]\+ passed' test_output.txt | head -1 | grep -o '[0-9]\+' || echo "0")
+        echo '{"component": "MCP Server", "tests": '${TEST_COUNT}', "status": "✅"}' > test-summary.json
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -94,6 +108,12 @@ jobs:
       with:
         name: coverage-mcp-server
         path: ./mcp-server/coverage-mcp.xml
+        
+    - name: Upload test summary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-summary-mcp-server
+        path: ./mcp-server/test-summary.json
 
   test-rag-pipeline:
     runs-on: ubuntu-latest
@@ -305,10 +325,17 @@ jobs:
       run: |
         python run_tests.py --mcp-only
         
+    - name: Run weave CLI tests
+      working-directory: ./weave
+      run: |
+        python run_tests.py --cli-only
+        
     - name: Run weave tests with coverage
       working-directory: ./weave
       run: |
         python -m pytest tests/ -v --cov=bin/modules --cov-report=xml:coverage-weave.xml
+        python -m coverage run --source=bin --append run_tests.py --cli-only
+        python -m coverage xml
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -427,17 +454,44 @@ jobs:
                   return None
           
           def count_test_results():
-              """Count test results from previous jobs based on naming conventions"""
-              components = {
-                  'Slack Bot': {'tests': 92, 'status': '✅'},
-                  'MCP Server': {'tests': 37, 'status': '✅'},
+              """Count test results dynamically from test summary JSON files and fallbacks"""
+              import json
+              import os
+              
+              components = {}
+              
+              # Try to read test summary JSON files first
+              for root, dirs, files in os.walk('coverage-reports'):
+                  for file in files:
+                      if file.startswith('test-summary') and file.endswith('.json'):
+                          try:
+                              file_path = os.path.join(root, file)
+                              with open(file_path, 'r') as f:
+                                  data = json.load(f)
+                                  component_name = data.get('component')
+                                  if component_name:
+                                      components[component_name] = {
+                                          'tests': data.get('tests', 0),
+                                          'status': data.get('status', '✅')
+                                      }
+                          except Exception as e:
+                              print(f"Error reading {file}: {e}")
+              
+              # Fallback for components that don't have JSON summaries yet
+              fallback_components = {
                   'RAG Pipeline': {'tests': 10, 'status': '✅'},
                   'Dagster Project': {'tests': 19, 'status': '✅'},
                   'Annotations': {'tests': 8, 'status': '✅'},
                   'MCP Client': {'tests': 1, 'status': '✅'},
-                  'Weave CLI': {'tests': 11, 'status': '✅'},
+                  'Weave CLI': {'tests': 29, 'status': '✅'},
                   'MCP Registry': {'tests': 20, 'status': '✅'}
               }
+              
+              # Add fallbacks for any missing components
+              for component, data in fallback_components.items():
+                  if component not in components:
+                      components[component] = data
+              
               return components
           
           def main():

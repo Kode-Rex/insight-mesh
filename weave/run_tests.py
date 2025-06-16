@@ -52,12 +52,41 @@ def run_mcp_tests_only():
     
     return 0 if result.wasSuccessful() else 1
 
+def run_cli_tests_only():
+    """Run only CLI command tests"""
+    os.environ['WEAVE_TEST_MODE'] = 'true'
+    
+    # Import and run essential CLI tests that are reliable
+    from tests.test_cli_essential import (
+        TestMainCLICore, TestToolCommandsCore, TestServiceCommandsCore, 
+        TestDatabaseCommandsCore, TestCLICommandDiscovery, TestCLIArgumentParsing
+    )
+    
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    
+    # Add CLI test cases
+    suite.addTests(loader.loadTestsFromTestCase(TestMainCLICore))
+    suite.addTests(loader.loadTestsFromTestCase(TestToolCommandsCore))
+    suite.addTests(loader.loadTestsFromTestCase(TestServiceCommandsCore))
+    suite.addTests(loader.loadTestsFromTestCase(TestDatabaseCommandsCore))
+    suite.addTests(loader.loadTestsFromTestCase(TestCLICommandDiscovery))
+    suite.addTests(loader.loadTestsFromTestCase(TestCLIArgumentParsing))
+    
+    # Run tests
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    
+    return 0 if result.wasSuccessful() else 1
+
 if __name__ == '__main__':
     import argparse
     
     parser = argparse.ArgumentParser(description='Run Weave tests')
     parser.add_argument('--mcp-only', action='store_true', 
                        help='Run only MCP management tests')
+    parser.add_argument('--cli-only', action='store_true',
+                       help='Run only CLI command tests')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose output')
     
@@ -66,6 +95,9 @@ if __name__ == '__main__':
     if args.mcp_only:
         print("🧪 Running MCP management tests only...")
         exit_code = run_mcp_tests_only()
+    elif args.cli_only:
+        print("🧪 Running CLI command tests only...")
+        exit_code = run_cli_tests_only()
     else:
         print("🧪 Running all Weave tests...")
         exit_code = run_tests()
