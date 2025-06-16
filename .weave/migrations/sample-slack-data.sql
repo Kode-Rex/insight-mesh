@@ -2,7 +2,7 @@
 -- Connect to insight_mesh database
 \c insight_mesh;
 
--- Insert sample Slack user data for tmfrisinger@gmail.com
+-- Insert sample Slack user data for t@example.com
 INSERT INTO slack_users (
     id, 
     name, 
@@ -22,13 +22,13 @@ INSERT INTO slack_users (
     'travis.frisinger',
     'Travis Frisinger',
     'Travis Frisinger',
-    'tmfrisinger@gmail.com',
+    't@example.com',
     true,  -- is_admin
     true,  -- is_owner
     false, -- is_bot
     false, -- deleted
     'T12345TEAM',  -- team_id
-    '{"profile": {"title": "Founder", "phone": "", "skype": "", "real_name": "Travis Frisinger", "real_name_normalized": "Travis Frisinger", "display_name": "Travis Frisinger", "display_name_normalized": "Travis Frisinger", "fields": null, "status_text": "", "status_emoji": "", "status_expiration": 0, "avatar_hash": "abc123", "email": "tmfrisinger@gmail.com", "first_name": "Travis", "last_name": "Frisinger", "image_24": "https://example.com/avatar_24.jpg", "image_32": "https://example.com/avatar_32.jpg", "image_48": "https://example.com/avatar_48.jpg", "image_72": "https://example.com/avatar_72.jpg", "image_192": "https://example.com/avatar_192.jpg", "image_512": "https://example.com/avatar_512.jpg"}}',
+    '{"profile": {"title": "Founder", "phone": "", "skype": "", "real_name": "Travis Frisinger", "real_name_normalized": "Travis Frisinger", "display_name": "Travis Frisinger", "display_name_normalized": "Travis Frisinger", "fields": null, "status_text": "", "status_emoji": "", "status_expiration": 0, "avatar_hash": "abc123", "email": "t@example.com", "first_name": "Travis", "last_name": "Frisinger", "image_24": "https://example.com/avatar_24.jpg", "image_32": "https://example.com/avatar_32.jpg", "image_48": "https://example.com/avatar_48.jpg", "image_72": "https://example.com/avatar_72.jpg", "image_192": "https://example.com/avatar_192.jpg", "image_512": "https://example.com/avatar_512.jpg"}}',
     NOW(),
     NOW()
 ) ON CONFLICT (email) DO UPDATE SET

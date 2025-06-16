@@ -61,7 +61,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info("Using default token with default email for permission filtering")
             return UserInfo(
                 id="default_user",
-                email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                email="t@example.com",  # Default email for permission filtering
                 name="Default User",
                 is_active=True,
                 token_type=token_type
@@ -81,7 +81,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Using default email for permission filtering")
             return UserInfo(
                 id=user_id,
-                email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                email="t@example.com",  # Default email for permission filtering
                 name="Default User",
                 is_active=True,
                 token_type=token_type
@@ -94,14 +94,25 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Extracted Slack user_id from token: {user_id}")
             
             # Look up the actual Slack user from the database
-            slack_user = await get_slack_user_by_id(user_id)
+            try:
+                slack_user = await get_slack_user_by_id(user_id)
+            except Exception as e:
+                logger.warning(f"Error looking up Slack user {user_id}: {str(e)}, using default")
+                # Fallback to default when lookup fails
+                return UserInfo(
+                    id=user_id,
+                    email="t@example.com",  # Default email for permission filtering
+                    name="Default User",
+                    is_active=True,
+                    token_type=token_type
+                )
             
             if not slack_user:
                 logger.warning(f"Slack user {user_id} not found in database, using default")
                 # Fallback to default for now
                 return UserInfo(
                     id=user_id,
-                    email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                    email="t@example.com",  # Default email for permission filtering
                     name="Default User",
                     is_active=True,
                     token_type=token_type
@@ -110,7 +121,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Found Slack user: {slack_user.email}")
             return UserInfo(
                 id=user_id,
-                email=slack_user.email or "tmfrisinger@gmail.com",  # Fallback to default if no email
+                email=slack_user.email or "t@example.com",  # Fallback to default if no email
                 name=slack_user.real_name or slack_user.display_name or slack_user.name or "Slack User",
                 is_active=not slack_user.deleted,
                 token_type=token_type

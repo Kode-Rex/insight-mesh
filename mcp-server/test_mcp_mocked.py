@@ -37,7 +37,7 @@ async def test_validate_token():
     # Test with default token
     user_info = await validate_token("default_token", "OpenWebUI")
     assert user_info.id == "default_user"
-    assert user_info.email == "tmfrisinger@gmail.com"
+    assert user_info.email == "t@example.com"
     assert user_info.token_type == "OpenWebUI"
     
     # Test with Slack token - mock the database call
@@ -48,7 +48,7 @@ async def test_validate_token():
         user_info = await validate_token("slack:U123456", "Slack")
         assert user_info.id == "U123456"
         assert user_info.token_type == "Slack"
-        assert user_info.email == "tmfrisinger@gmail.com"  # Should use default fallback
+        assert user_info.email == "t@example.com"  # Should use default fallback
     
     # Test with invalid token should raise an error
     with pytest.raises(ValueError):

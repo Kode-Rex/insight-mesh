@@ -59,7 +59,7 @@ class TestContextService:
         # Create user info
         user_info = UserInfo(
             id="user123",
-            email="tmfrisinger@gmail.com",
+            email="t@example.com",
             name="Test User",
             is_active=True,
             token_type="OpenWebUI"
@@ -79,7 +79,7 @@ class TestContextService:
         
         # Check that the query and user_email are correct
         assert call_args[1]["query"] == "What are our Q1 goals?"
-        assert call_args[1]["user_email"] == "tmfrisinger@gmail.com"
+        assert call_args[1]["user_email"] == "t@example.com"
         assert call_args[1]["size"] == 5
         
         # Check result
@@ -131,7 +131,7 @@ class TestContextService:
         # Create user info
         user_info = UserInfo(
             id="user123",
-            email="tmfrisinger@gmail.com",
+            email="t@example.com",
             name="Test User",
             is_active=True,
             token_type="OpenWebUI"

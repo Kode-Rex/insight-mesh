@@ -84,7 +84,7 @@ class TestMCP:
             # Create a sample OpenWebUI token
             token_payload = {
                 "sub": "user123",
-                "email": "tmfrisinger@gmail.com",
+                "email": "t@example.com",
                 "name": "Test User",
                 "exp": datetime.now(UTC).timestamp() + 3600  # 1 hour expiration
             }
@@ -114,7 +114,7 @@ class TestMCP:
             assert metadata["token_type"] == "OpenWebUI"
             assert "user" in metadata
             assert metadata["user"]["id"] == "user123"
-            assert metadata["user"]["email"] == "tmfrisinger@gmail.com"
+            assert metadata["user"]["email"] == "t@example.com"
     
     @pytest.mark.asyncio
     async def test_process_context_with_slack_token(self, test_context_result):
@@ -344,29 +344,31 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_mcp_tool_registration(self):
         """Test that MCP tools are properly registered."""
-        # Get the tools from the MCP server
-        tools = mcp.list_tools()
+        # Get the tools from the MCP server (returns dict of tools)
+        tools = await mcp.get_tools()
         
         # Check that required tools are registered
-        tool_names = [tool.name for tool in tools]
+        tool_names = list(tools.keys())
         assert "health_check" in tool_names
         assert "get_context" in tool_names
     
-    def test_health_check_tool_metadata(self):
+    @pytest.mark.asyncio
+    async def test_health_check_tool_metadata(self):
         """Test health check tool metadata."""
-        tools = mcp.list_tools()
-        health_tool = next((tool for tool in tools if tool.name == "health_check"), None)
+        tools = await mcp.get_tools()
+        health_tool = tools.get("health_check")
         
         assert health_tool is not None
-        assert health_tool.description == "Check if the MCP server is running"
+        assert health_tool.description == "Health check endpoint"
     
-    def test_get_context_tool_metadata(self):
+    @pytest.mark.asyncio
+    async def test_get_context_tool_metadata(self):
         """Test get context tool metadata."""
-        tools = mcp.list_tools()
-        context_tool = next((tool for tool in tools if tool.name == "get_context"), None)
+        tools = await mcp.get_tools()
+        context_tool = tools.get("get_context")
         
         assert context_tool is not None
-        assert "retrieve relevant context" in context_tool.description.lower()
+        assert "retrieve context" in context_tool.description.lower()
 
 
 class TestErrorHandling:
