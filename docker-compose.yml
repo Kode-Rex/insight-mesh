@@ -64,6 +64,7 @@ services:
       - OTEL_EXPORTER=in_memory
       - MCP_SERVER_URL=http://mcp:9091/sse
       - MCP_API_KEY=${MCP_API_KEY}
+      - MCP_REGISTRY_URL=http://mcp-registry:8080
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - WEBCAT_API_KEY=${WEBCAT_API_KEY}
@@ -74,6 +75,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mcp-registry:
+        condition: service_started
     restart: unless-stopped
 
   # PostgreSQL Database (consolidated for all services)
@@ -83,7 +86,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=postgres  # Default database
-      - POSTGRES_MULTIPLE_DATABASES=openwebui,litellm,mcp,insight_mesh,slack
+      - POSTGRES_MULTIPLE_DATABASES=openwebui,litellm,insight_mesh,slack
     ports:
       - "5432:5432"
     volumes:
@@ -111,7 +114,7 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  # WebCat service for web search capabilities
+  # WebCat service for web search capabilities (managed via MCP Registry)
   webcat:
     image: tmfrisinger/webcat:latest
     ports:
@@ -137,6 +140,7 @@ services:
       - caddy_logs:/var/log/caddy
     depends_on:
       - openwebui
+      - mcp-registry
     restart: unless-stopped
 
   # Elasticsearch for document storage and retrieval
@@ -209,6 +213,22 @@ services:
       - elasticsearch
       - neo4j
       - postgres
+    restart: unless-stopped
+
+  # MCP Configuration Registry (read-only API for configs)
+  mcp-registry:
+    build:
+      context: .
+      dockerfile: mcp_registry/Dockerfile
+    ports:
+      - "8888:8080"  # Expose registry on port 8888
+    environment:
+      - MCP_CONFIG_PATH=/app/.weave/config.json
+    volumes:
+      - ./.weave:/app/.weave:ro  # Read-only access to config
+      - ./mcp_registry:/app/mcp_registry
+    depends_on:
+      - webcat  # Registry depends on WebCat being available
     restart: unless-stopped
 
   mcp:

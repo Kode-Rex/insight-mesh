@@ -14,6 +14,7 @@ from models import (
 )
 from datetime import datetime, UTC
 from database import get_slack_user_by_id
+from fastapi import HTTPException
 
 # Load environment variables
 load_dotenv()
@@ -60,7 +61,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info("Using default token with default email for permission filtering")
             return UserInfo(
                 id="default_user",
-                email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                email="t@example.com",  # Default email for permission filtering
                 name="Default User",
                 is_active=True,
                 token_type=token_type
@@ -80,7 +81,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Using default email for permission filtering")
             return UserInfo(
                 id=user_id,
-                email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                email="t@example.com",  # Default email for permission filtering
                 name="Default User",
                 is_active=True,
                 token_type=token_type
@@ -93,14 +94,25 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Extracted Slack user_id from token: {user_id}")
             
             # Look up the actual Slack user from the database
-            slack_user = await get_slack_user_by_id(user_id)
+            try:
+                slack_user = await get_slack_user_by_id(user_id)
+            except Exception as e:
+                logger.warning(f"Error looking up Slack user {user_id}: {str(e)}, using default")
+                # Fallback to default when lookup fails
+                return UserInfo(
+                    id=user_id,
+                    email="t@example.com",  # Default email for permission filtering
+                    name="Default User",
+                    is_active=True,
+                    token_type=token_type
+                )
             
             if not slack_user:
                 logger.warning(f"Slack user {user_id} not found in database, using default")
                 # Fallback to default for now
                 return UserInfo(
                     id=user_id,
-                    email="tmfrisinger@gmail.com",  # Default email for permission filtering
+                    email="t@example.com",  # Default email for permission filtering
                     name="Default User",
                     is_active=True,
                     token_type=token_type
@@ -109,7 +121,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             logger.info(f"Found Slack user: {slack_user.email}")
             return UserInfo(
                 id=user_id,
-                email=slack_user.email or "tmfrisinger@gmail.com",  # Fallback to default if no email
+                email=slack_user.email or "t@example.com",  # Fallback to default if no email
                 name=slack_user.real_name or slack_user.display_name or slack_user.name or "Slack User",
                 is_active=not slack_user.deleted,
                 token_type=token_type
@@ -295,6 +307,70 @@ def system_info() -> str:
     - get_context: Retrieve personalized context for a user's prompt
     - health_check: Check if the server is healthy
     """
+
+def verify_api_key(api_key: str) -> bool:
+    """Verify the API key"""
+    if not api_key or api_key != settings.MCP_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return True
+
+def parse_auth_token(auth_header: str) -> tuple[str, str]:
+    """Parse the authorization header and return token and type"""
+    if not auth_header:
+        raise ValueError("Token is required")
+    
+    if auth_header.startswith("Bearer "):
+        # OpenWebUI JWT token
+        token = auth_header[7:]  # Remove "Bearer " prefix
+        return token, "OpenWebUI"
+    elif auth_header.startswith("slack:"):
+        # Slack token format
+        return auth_header, "Slack"
+    else:
+        raise ValueError("Invalid token format")
+
+def extract_user_info_from_token(token: str, token_type: str) -> UserInfo:
+    """Extract user information from token"""
+    try:
+        if token_type == "OpenWebUI":
+            # Decode without signature verification for OpenWebUI
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            
+            # Check if token is expired
+            exp = decoded.get("exp")
+            if exp and datetime.now(UTC).timestamp() > exp:
+                raise ValueError("Token expired")
+            
+            user_id = decoded.get("sub")
+            if not user_id:
+                raise ValueError("Invalid token: missing user ID")
+                
+            return UserInfo(
+                id=user_id,
+                email=decoded.get("email"),
+                name=decoded.get("name"),
+                is_active=decoded.get("is_active", True),
+                token_type=token_type
+            )
+        elif token_type == "Slack":
+            if not token.startswith("slack:"):
+                raise ValueError("Invalid Slack token format")
+            
+            user_id = token.split(":", 1)[1]
+            if not user_id or not user_id.startswith("U"):
+                raise ValueError("Invalid Slack token format")
+            
+            return UserInfo(
+                id=user_id,
+                email=None,
+                name=None,
+                is_active=True,
+                token_type=token_type
+            )
+        else:
+            raise ValueError("Unsupported token type")
+    except jwt.InvalidTokenError as e:
+        raise ValueError(f"Invalid token: {str(e)}") from e
 
 if __name__ == "__main__":
     # Use SSE transport (Server-Sent Events)

@@ -226,6 +226,61 @@ Show more detailed RAG logs without filtering:
 weave logs rag --verbose
 ```
 
+### MCP Server Management
+
+Weave provides declarative management of MCP (Model Context Protocol) servers, allowing you to version-control your MCP configurations and sync them to LiteLLM automatically.
+
+#### MCP Server Commands
+
+**Manage MCP servers in weave config:**
+```bash
+# Add a new MCP server
+weave tool server add webcat http://webcat:8765/mcp \
+  --description "Web search tool" \
+  --env WEBCAT_API_KEY=secret
+
+# List configured servers
+weave tool server list
+weave tool server list --verbose
+
+# Remove a server
+weave tool server remove webcat
+```
+
+**Sync servers to LiteLLM database:**
+```bash
+# Sync all servers to LiteLLM
+weave tool sync
+
+# Preview what would be synced
+weave tool sync --dry-run
+
+# Initialize servers on startup
+weave tool init --wait-for-service
+```
+
+#### MCP Configuration
+
+MCP servers are stored in `.weave/config.json` under the `mcp_servers` section:
+
+```json
+{
+  "mcp_servers": {
+    "webcat": {
+      "url": "http://webcat:8765/mcp",
+      "transport": "sse",
+      "spec_version": "2024-11-05", 
+      "description": "WebCat MCP Server - For Web Search",
+      "env": {
+        "WEBCAT_API_KEY": "${WEBCAT_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+For detailed MCP management documentation, see [`docs/mcp-management.md`](../docs/mcp-management.md).
+
 ## Configuration
 
 Weave uses a configuration file to manage services and databases. This configuration is stored in `.weave/config.json` in the project root.

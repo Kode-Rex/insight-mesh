@@ -23,6 +23,25 @@ model_list:
       api_base: https://generativelanguage.googleapis.com/
       api_key: os.environ/GOOGLE_API_KEY
 
+  - model_name: claude-3.5
+    litellm_params:
+      model: anthropic.claude-3.5-sonnet-20240610
+      api_key: os.environ/ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+  
+  - model_name: claude-3.7
+    litellm_params:
+      model: anthropic.claude-3.7-sonnet-20250219
+      api_key: os.environ/ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+
+  - model_name: clause-4.0
+    litellm_params:
+      model: anthropic.claude-4.0-sonnet-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+
+
 environment_variables:
   OPENAI_API_KEY: ${OPENAI_API_KEY}
   WEBCAT_API_KEY: ${WEBCAT_API_KEY}
@@ -53,10 +72,10 @@ rate_limits:
 litellm_settings:
   num_retries: 3
   request_timeout: 30
-  callbacks: rag_pipeline.pre_request_hook.rag_handler_instance
+  callbacks: 
+    - rag_pipeline.pre_request_hook.rag_handler_instance
   forward_client_headers_to_llm_api: true
 
-# MCP servers configuration for web search tool
-mcp_servers:
-  web_search:
-    url: "http://localhost:8765/search/sk-abc-123-def-456/sse"
+# Note: LiteLLM Proxy does not load MCP servers from config.yaml
+# MCP servers must be configured via the Admin UI at /ui/?page=mcp-servers
+# or via the REST API at /v1/mcp/server

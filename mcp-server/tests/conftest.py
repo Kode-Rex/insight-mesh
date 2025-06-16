@@ -41,7 +41,7 @@ def sample_document():
             created_time=datetime.now(),
             modified_time=datetime.now(),
             web_link=fake.uri(),
-            permissions=[{"type": "user", "email": "tmfrisinger@gmail.com"}],
+            permissions=[{"type": "user", "email": "t@example.com"}],
             is_public=False
         )
     )
@@ -51,7 +51,7 @@ def sample_user_info():
     """Generate sample user info for testing."""
     return UserInfo(
         id=fake.uuid4(),
-        email="tmfrisinger@gmail.com",
+        email="t@example.com",
         name=fake.name(),
         is_active=True,
         token_type="OpenWebUI"
@@ -119,7 +119,7 @@ def mock_elasticsearch_service(mocker):
                 metadata=DocumentMetadata(
                     source="google_drive",
                     is_public=False,
-                    permissions=[{"type": "user", "email": kwargs.get("user_email", "tmfrisinger@gmail.com")}]
+                    permissions=[{"type": "user", "email": kwargs.get("user_email", "t@example.com")}]
                 )
             ),
             Document(

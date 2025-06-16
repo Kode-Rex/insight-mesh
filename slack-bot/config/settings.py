@@ -4,16 +4,16 @@ from typing import Optional
 
 class SlackSettings(BaseSettings):
     """Slack API settings"""
-    bot_token: str  # Changed from SecretStr to str for Slack SDK compatibility
-    app_token: str  # Changed from SecretStr to str for Slack SDK compatibility
+    bot_token: str = "test-token"  # Default for testing
+    app_token: str = "test-token"  # Default for testing
     bot_id: str = ""
     
     model_config = ConfigDict(env_prefix="SLACK_")
 
 class LLMSettings(BaseSettings):
     """LLM API settings"""
-    api_url: str = Field(..., description="LLM API URL")
-    api_key: SecretStr
+    api_url: str = Field(default="http://localhost:9091", description="LLM API URL")
+    api_key: SecretStr = SecretStr("test-api-key")  # Default for testing
     model: str = "gpt-4o-mini"
     
     model_config = ConfigDict(env_prefix="LLM_")

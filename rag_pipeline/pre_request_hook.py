@@ -40,6 +40,7 @@ from typing import Optional, Literal, Dict, Any, List
 import json
 import aiohttp
 import asyncio
+from datetime import datetime
 
 # MCP Server configuration
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
@@ -47,6 +48,14 @@ MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "30"))  # Timeout in seconds
 MCP_MAX_RETRIES = int(os.environ.get("MCP_MAX_RETRIES", "3"))
 TOKEN_TYPE = os.environ.get("TOKEN_TYPE", "OpenWebUI")  # Type of JWT token being used
+
+# MCP Tools configuration (disabled - using direct MCP server integration instead)
+# LITELLM_PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
+# LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-1234")
+# ENABLE_MCP_TOOLS = os.environ.get("ENABLE_MCP_TOOLS", "false").lower() == "true"
+
+# MCP Registry configuration (for reading config)
+MCP_REGISTRY_URL = os.environ.get("MCP_REGISTRY_URL", "http://mcp-registry:8080")
 
 async def get_context_from_mcp(
     api_key: str,
@@ -102,6 +111,40 @@ async def get_context_from_mcp(
     except Exception as e:
         logger.error(f"Error calling MCP server: {str(e)}")
         return None
+
+async def get_mcp_servers_from_registry(
+    session: Optional[aiohttp.ClientSession] = None
+) -> Optional[Dict[str, Any]]:
+    """Get MCP server configurations from the registry"""
+    try:
+        if not session:
+            session = aiohttp.ClientSession()
+            should_close = True
+        else:
+            should_close = False
+            
+        # Get RAG-scoped MCP servers from registry
+        async with session.get(
+            f"{MCP_REGISTRY_URL}/servers/rag",
+            timeout=aiohttp.ClientTimeout(total=MCP_TIMEOUT)
+        ) as response:
+            if response.status == 200:
+                servers_data = await response.json()
+                logger.info(f"Retrieved {len(servers_data)} MCP servers from registry")
+                return servers_data
+            else:
+                logger.warning(f"Failed to get MCP servers from registry: {response.status}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error getting MCP servers from registry: {str(e)}")
+        return None
+    finally:
+        if should_close and session:
+            await session.close()
+
+# Removed get_mcp_tools_from_litellm - LiteLLM doesn't have MCP server management APIs
+# The correct approach is to read MCP servers directly from the registry and call them directly
 
 def summarize_conversation_history(messages: List[Dict[str, str]]) -> str:
     """Create a summary of the conversation history"""
@@ -231,8 +274,10 @@ class RAGHandler(CustomLogger):
             history_summary = summarize_conversation_history(messages[:-1])  # Exclude latest message
             logger.info(f"History summary: {history_summary[:100]}...")
             
-            # Get context from MCP server
+            # Get context from MCP server and available tools
             session = await self._ensure_session()
+            
+            # Fetch context from MCP
             context = await get_context_from_mcp(
                 api_key=MCP_API_KEY,
                 auth_token=auth_token,
@@ -242,7 +287,10 @@ class RAGHandler(CustomLogger):
                 session=session
             )
             
-            # Only modify the request if we got valid context
+            # Get current date and time for all requests
+            current_date = datetime.now().strftime("%A, %B %d, %Y")
+            
+            # Check if we got valid context from MCP
             if context and context.get("context_items"):
                 logger.info(f"Got {len(context['context_items'])} context items from MCP")
                 # Build the context string from context items
@@ -278,38 +326,104 @@ class RAGHandler(CustomLogger):
                 context_str = "\n\n".join(context_parts)
                 logger.info(f"Context string length: {len(context_str)}")
                 
+                # Build a list of valid sources with proper formatting for citation examples
+                citation_examples = []
+                valid_sources = []
+                
+                for item in context["context_items"]:
+                    item_metadata = item.get("metadata", {})
+                    source = item_metadata.get("source", "unknown")
+                    url = item_metadata.get("url")
+                    file_name = item_metadata.get("file_name")
+                    
+                    # Skip system context for citation examples
+                    if source == "system_context":
+                        continue
+                    
+                    # Create a proper source name
+                    if file_name:
+                        source_name = file_name
+                    elif source and source != "unknown":
+                        source_name = source.replace("_", " ").title()
+                    else:
+                        source_name = "Document"
+                    
+                    # Include all sources, with URL if available
+                    if url:
+                        citation_examples.append(f"- [{source_name}]({url})")
+                        valid_sources.append({"name": source_name, "url": url})
+                    else:
+                        citation_examples.append(f"- {source_name}")
+                        valid_sources.append({"name": source_name, "url": None})
+                
+                # Create citation examples text
+                if citation_examples:
+                    examples_text = "Available sources for citation:\n" + "\n".join(citation_examples[:5])  # Limit to 5 examples
+                else:
+                    examples_text = "No specific sources available for citation."
+                
                 # Create a system message that instructs the model to cite sources with URLs
                 system_message = (
-                    "You are a helpful assistant that MUST cite sources in EVERY response. "
-                    "IMPORTANT: You MUST explicitly mention which documents you used in your answer. "
-                    "Format your response like this:\n\n"
-                    "1. First, provide your answer\n"
-                    "2. Then, on a new line, write 'Sources used:' followed by a list of the document sources you referenced\n"
-                    "3. If the source has a URL, include it after the source name using the format: [Source Name](URL)\n\n"
+                    f"The current date is {current_date}.\n\n"
+                    "You are a helpful assistant that MUST cite sources in EVERY response when using provided context.\n\n"
+                    "## SOURCE CITATION REQUIREMENTS:\n"
+                    "1. You MUST cite sources for any information you use from the provided documents\n"
+                    "2. Use ONLY the exact source names and URLs provided below\n"
+                    "3. Do NOT make up or modify URLs - only use valid URLs that are provided\n\n"
+                    "## CITATION FORMAT:\n"
+                    "End your response with a 'Sources:' section using this exact format:\n\n"
+                    "**Sources:**\n"
+                    "- [Document Name](URL) - if URL is available\n"
+                    "- Document Name - if no URL is available\n\n"
+                    "## CITATION EXAMPLES:\n"
+                    "**Sources:**\n"
+                    "- [Company Policy Manual](https://docs.company.com/policies)\n"
+                    "- Meeting Notes - March 2024\n"
+                    "- [Technical Documentation](https://wiki.company.com/tech-docs)\n\n"
+                    f"## {examples_text}\n\n"
+                    "## CONTEXT DOCUMENTS:\n"
                     "Here are the relevant documents to help answer the user's question:\n\n"
                     f"{context_str}\n\n"
-                    "REMEMBER: You MUST cite your sources in EVERY response. If you don't cite sources, your response is incomplete."
+                    "## IMPORTANT REMINDERS:\n"
+                    "- ALWAYS include a 'Sources:' section when using information from the provided documents\n"
+                    "- Use the EXACT source names and URLs provided above\n"
+                    "- Do NOT create or modify URLs\n"
+                    "- If you cannot find relevant information in the provided sources, say so clearly"
                 )
                 
-                # Find or create system message
-                system_messages = [msg for msg in messages if msg.get("role") == "system"]
-                if system_messages:
-                    # Update the system message with context
-                    system_messages[0]["content"] = system_message
-                    logger.info("Updated existing system message with context")
-                else:
-                    # Create new system message with context
-                    messages.insert(0, {
-                        "role": "system",
-                        "content": system_message
-                    })
-                    logger.info("Created new system message with context")
-                
-                # Update the request data
-                data["messages"] = messages
-                logger.info("Successfully injected context into request")
+                logger.info("Created system message with MCP context and current date")
             else:
-                logger.info("No context items received from MCP")
+                logger.info("No context items received from MCP, creating basic system message with date")
+                # Create a basic system message with just the current date
+                system_message = f"The current date is {current_date}."
+            
+            # Find or create system message
+            system_messages = [msg for msg in messages if msg.get("role") == "system"]
+            if system_messages:
+                # Check if existing system message already has date info
+                existing_content = system_messages[0]["content"]
+                if "The current date is" not in existing_content:
+                    # Prepend date to existing system message
+                    system_messages[0]["content"] = f"The current date is {current_date}.\n\n{existing_content}"
+                    logger.info("Added current date to existing system message")
+                elif context and context.get("context_items"):
+                    # Update the system message with context (already includes date)
+                    system_messages[0]["content"] = system_message
+                    logger.info("Updated existing system message with context and date")
+            else:
+                # Create new system message
+                messages.insert(0, {
+                    "role": "system",
+                    "content": system_message
+                })
+                logger.info("Created new system message with current date")
+            
+            # Note: MCP tools integration removed - LiteLLM doesn't provide MCP server management APIs
+            # Tools would need to be implemented via direct MCP server communication if needed
+            
+            # Update the request data
+            data["messages"] = messages
+            logger.info("Successfully injected current date and tools into request")
             
         except Exception as e:
             logger.error(f"Error in pre_request_hook: {str(e)}", exc_info=True)
@@ -317,6 +431,93 @@ class RAGHandler(CustomLogger):
             return data
         
         return data
+
+    async def async_post_call_success_hook(
+        self,
+        user_api_key_dict,
+        response_obj,
+        start_time: float,
+        end_time: float
+    ):
+        """Handle tool calls in LLM responses"""
+        # Check if MCP tool execution is enabled
+        enable_mcp_tools = os.environ.get("ENABLE_MCP_TOOL_EXECUTION", "true").lower() == "true"
+        if not enable_mcp_tools:
+            return response_obj
+            
+        logger.info("=== MCP TOOL HANDLER POST-RESPONSE ===")
+        logger.info(f"Response received in {end_time - start_time:.2f}s")
+        
+        try:
+            # Check if response has tool calls
+            if hasattr(response_obj, 'choices') and response_obj.choices:
+                message = response_obj.choices[0].message
+                
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    logger.info(f"Found {len(message.tool_calls)} tool calls to execute")
+                    
+                    # Execute each tool call
+                    tool_results = []
+                    for tool_call in message.tool_calls:
+                        try:
+                            result = await self._execute_mcp_tool_call(tool_call)
+                            tool_results.append({
+                                "tool_call_id": tool_call.id,
+                                "result": result
+                            })
+                        except Exception as e:
+                            logger.error(f"Failed to execute tool call {tool_call.id}: {e}")
+                            tool_results.append({
+                                "tool_call_id": tool_call.id,
+                                "error": str(e)
+                            })
+                    
+                    # Add tool results to response metadata
+                    if not hasattr(response_obj, 'metadata'):
+                        response_obj.metadata = {}
+                    response_obj.metadata['tool_results'] = tool_results
+                    
+                    logger.info(f"Executed {len(tool_results)} tool calls")
+            
+        except Exception as e:
+            logger.error(f"Error in post-response hook: {str(e)}", exc_info=True)
+        
+        return response_obj
+    
+    async def _execute_mcp_tool_call(self, tool_call):
+        """Execute a single tool call on MCP server"""
+        try:
+            # Import the transformation function lazily
+            try:
+                from litellm.experimental_mcp_client.tools import transform_openai_tool_call_request_to_mcp_tool_call_request
+            except ImportError:
+                logger.error("litellm.experimental_mcp_client.tools not available - MCP tool execution disabled")
+                raise Exception("MCP tool execution requires litellm.experimental_mcp_client.tools")
+            
+            # Convert OpenAI tool call to MCP format
+            mcp_call = transform_openai_tool_call_request_to_mcp_tool_call_request(
+                openai_tool=tool_call.model_dump()
+            )
+            
+            logger.info(f"Executing MCP tool: {mcp_call.name} with args: {mcp_call.arguments}")
+            
+            # Get MCP client and execute tool
+            mcp_server_url = os.environ.get("MCP_SERVER_URL", "http://mcp:9091/sse")
+            
+            # Use fastmcp client to execute the tool
+            from fastmcp import Client
+            async with Client(mcp_server_url) as client:
+                result = await client.call_tool(
+                    name=mcp_call.name, 
+                    arguments=mcp_call.arguments
+                )
+            
+            logger.info(f"Tool execution result: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error executing tool call: {e}")
+            raise
 
     async def __aenter__(self):
         await self._ensure_session()

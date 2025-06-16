@@ -36,7 +36,7 @@ class TestElasticsearchService:
                                     "modified_time": "2023-01-15T00:00:00",
                                     "web_link": "https://drive.google.com/file/abc123",
                                     "permissions": [
-                                        {"type": "user", "email": "tmfrisinger@gmail.com"}
+                                        {"type": "user", "email": "t@example.com"}
                                     ],
                                     "is_public": False
                                 }
@@ -72,7 +72,7 @@ class TestElasticsearchService:
         # Perform search with user email
         results = await service.search_documents(
             query="Q1 goals",
-            user_email="tmfrisinger@gmail.com",
+            user_email="t@example.com",
             size=5
         )
         
@@ -92,12 +92,12 @@ class TestElasticsearchService:
         should_clauses = body["query"]["bool"]["should"]
         email_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_emails")]
         assert len(email_clause) == 1
-        assert email_clause[0]["term"]["meta.accessible_by_emails"] == "tmfrisinger@gmail.com"
+        assert email_clause[0]["term"]["meta.accessible_by_emails"] == "t@example.com"
         
         # Check that domain filtering is included
         domain_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_domains")]
         assert len(domain_clause) == 1
-        assert domain_clause[0]["term"]["meta.accessible_by_domains"] == "gmail.com"
+        assert domain_clause[0]["term"]["meta.accessible_by_domains"] == "example.com"
         
         # Check that minimum_should_match is set
         assert body["query"]["bool"]["minimum_should_match"] == 1
@@ -156,7 +156,7 @@ class TestElasticsearchService:
         with pytest.raises(Exception) as exc_info:
             await service.search_documents(
                 query="Q1 goals",
-                user_email="tmfrisinger@gmail.com"
+                user_email="t@example.com"
             )
         
         assert str(exc_info.value) == "Search failed"

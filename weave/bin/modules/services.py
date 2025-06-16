@@ -19,6 +19,7 @@ def _display_services_with_dependencies(configured_services, running_containers,
     # Separate services into main services and dependencies
     main_services = []
     dependency_services = set()
+    managed_services = set()
     
     # First pass: identify which services are dependencies
     for service_id, service_info in configured_services.items():
@@ -26,9 +27,20 @@ def _display_services_with_dependencies(configured_services, running_containers,
         for dep in depends_on:
             dependency_services.add(dep)
     
-    # Second pass: categorize services
+    # Also identify services that are managed by other services
     for service_id, service_info in configured_services.items():
-        if service_id not in dependency_services:
+        managed_by = service_info.get("managed_by")
+        if managed_by:
+            managed_services.add(service_id)
+    
+    # Second pass: categorize services as main services
+    for service_id, service_info in configured_services.items():
+        # Services that provide other services should always be main services (even if they are dependencies)
+        provides_services = service_info.get("provides_services", [])
+        if provides_services:
+            main_services.append(service_id)
+        # Regular services that are not dependencies and not managed by others
+        elif service_id not in dependency_services and service_id not in managed_services:
             main_services.append(service_id)
     
     # Sort main services
@@ -48,11 +60,25 @@ def _display_services_with_dependencies(configured_services, running_containers,
             if dep_id in configured_services:
                 dep_info = configured_services[dep_id]
                 _add_service_to_table(table, dep_id, dep_info, running_containers, docker_available, indent=1)
+                
+                # Also show services that this dependency provides/manages
+                dep_provides_services = dep_info.get("provides_services", [])
+                for managed_id in dep_provides_services:
+                    if managed_id in configured_services:
+                        managed_info = configured_services[managed_id]
+                        _add_service_to_table(table, managed_id, managed_info, running_containers, docker_available, indent=2)
+        
+        # Add managed services (services that this service provides/manages)
+        provides_services = service_info.get("provides_services", [])
+        for managed_id in provides_services:
+            if managed_id in configured_services:
+                managed_info = configured_services[managed_id]
+                _add_service_to_table(table, managed_id, managed_info, running_containers, docker_available, indent=1)
     
-    # Add standalone services (those that aren't main services and aren't dependencies)
+    # Add standalone services (those that aren't main services, dependencies, or managed services)
     standalone_services = []
     for service_id in configured_services:
-        if service_id not in main_services and service_id not in dependency_services:
+        if service_id not in main_services and service_id not in dependency_services and service_id not in managed_services:
             standalone_services.append(service_id)
     
     for service_id in sorted(standalone_services):
@@ -83,9 +109,13 @@ def _add_service_to_table(table, service_id, service_info, running_containers, d
         # Main service
         service_display = f"{status_dot} {service_id}"
         name_display = f"[bold]{display_name}[/bold]"
-    else:
+    elif indent == 1:
         # Dependency service with connection line
         service_display = f"  └─ {status_dot} {service_id}"
+        name_display = f"[dim]{display_name}[/dim]"
+    else:
+        # Sub-dependency (managed services) with deeper indentation
+        service_display = f"    └─ {status_dot} {service_id}"
         name_display = f"[dim]{display_name}[/dim]"
     
     table.add_row(

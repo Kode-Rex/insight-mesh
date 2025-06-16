@@ -5,11 +5,10 @@
 }
 
 :80 {
-    # Root path - no auth, just proxy to OpenWebUI
-    route /* {
-        # Pass oauth_id_token cookie value as x-pass-thru-token header
-        header +X-Pass-Thru-Token "{http.request.cookie.oauth_id_token}"
-        reverse_proxy openwebui:3000
+    # MCP Configuration Registry (read-only API) - MUST come before wildcard
+    route /mcp/* {
+        uri strip_prefix /mcp
+        reverse_proxy mcp-registry:8080
     }
 
     # Debug route to check cookie extraction
@@ -25,6 +24,13 @@
         # Pass oauth_id_token cookie value as x-pass-thru-token header
         header +X-Pass-Thru-Token "{http.request.cookie.oauth_id_token}"
         reverse_proxy litellm:4000
+    }
+
+    # Root path - no auth, just proxy to OpenWebUI (MUST be last - wildcard catches all)
+    route /* {
+        # Pass oauth_id_token cookie value as x-pass-thru-token header
+        header +X-Pass-Thru-Token "{http.request.cookie.oauth_id_token}"
+        reverse_proxy openwebui:3000
     }
 
     # Log requests

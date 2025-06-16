@@ -22,7 +22,7 @@ try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
     from weave import __version__
 except ImportError:
-    __version__ = "0.1.3"  # Fallback to known version
+    __version__ = "0.1.5"  # Fallback to known version
 
 @click.group(invoke_without_command=True)
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
