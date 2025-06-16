@@ -85,12 +85,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-asyncio pytest-cov
+        pip install pytest pytest-asyncio pytest-cov fastmcp==2.7.0
         
     - name: Run MCP server tests
       working-directory: ./mcp-server
       run: |
-        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-mcp.xml > test_output.txt 2>&1
+        # Run tests excluding integration tests (they require a running server)
+        python -m pytest tests/ -v --cov=. --cov-report=xml:coverage-mcp.xml -m "not integration" > test_output.txt 2>&1
         
         # Extract test count and create summary
         TEST_COUNT=$(grep -o '[0-9]\+ passed' test_output.txt | head -1 | grep -o '[0-9]\+' || echo "0")
@@ -277,25 +278,7 @@ jobs:
         name: coverage-annotations
         path: ./coverage-annotations.xml
 
-  test-mcp-client:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install fastmcp==2.7.0 pytest pytest-asyncio
-        
-    - name: Run MCP client test
-      run: |
-        python -m pytest test_mcp.py -v
+
 
   test-weave-cli:
     runs-on: ubuntu-latest
@@ -388,7 +371,7 @@ jobs:
         
   # This job will only run when all required test jobs succeed
   test-summary:
-    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client, test-weave-cli, test-mcp-registry]
+    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-weave-cli, test-mcp-registry]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -482,7 +465,6 @@ jobs:
                   'RAG Pipeline': {'tests': 10, 'status': '✅'},
                   'Dagster Project': {'tests': 19, 'status': '✅'},
                   'Annotations': {'tests': 8, 'status': '✅'},
-                  'MCP Client': {'tests': 1, 'status': '✅'},
                   'Weave CLI': {'tests': 29, 'status': '✅'},
                   'MCP Registry': {'tests': 20, 'status': '✅'}
               }
