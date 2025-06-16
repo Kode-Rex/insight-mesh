@@ -36,7 +36,13 @@ This workflow runs all tests for the Insight Mesh project on every push to the m
    - Generates coverage reports
    - Uploads coverage to Codecov with the `weave` flag
 
-6. **Infrastructure Tests**
+6. **MCP Registry**
+   - Runs unit tests for the MCP registry service
+   - Tests REST API endpoints, configuration loading, and scope filtering
+   - Generates coverage reports
+   - Uploads coverage to Codecov with the `mcpregistry` flag
+
+7. **Infrastructure Tests**
    - Runs tests that verify infrastructure dependencies are working correctly
    - Includes Neo4j connectivity test
    - This job is optional and will not fail the workflow if it fails
@@ -78,12 +84,16 @@ To run the same tests locally:
 5. For the Weave CLI:
    ```bash
    cd weave
-   python run_tests.py --mcp-only
-   # Or run all tests with coverage
    python -m pytest tests/ -v --cov=bin/modules --cov-report=term-missing
    ```
 
-6. For Infrastructure Tests:
+6. For the MCP Registry:
+   ```bash
+   cd mcp_registry
+   PYTHONPATH=.. python -m pytest test_app.py -v --cov=mcp_registry.app --cov-report=term-missing
+   ```
+
+7. For Infrastructure Tests:
    ```bash
    # Neo4j test (requires Neo4j running locally)
    cd dagster_project

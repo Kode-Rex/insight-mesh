@@ -286,10 +286,40 @@ jobs:
         file: ./weave/coverage-weave.xml
         flags: weave
         fail_ci_if_error: false
+
+  test-mcp-registry:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install MCP registry dependencies
+      working-directory: ./mcp_registry
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov httpx
+        
+    - name: Run MCP registry tests
+      working-directory: ./mcp_registry
+      run: |
+        PYTHONPATH=.. python -m pytest test_app.py -v --cov=mcp_registry.app --cov-report=xml:coverage-mcp-registry.xml
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./mcp_registry/coverage-mcp-registry.xml
+        flags: mcpregistry
+        fail_ci_if_error: false
         
   # This job will only run when all required test jobs succeed
   test-summary:
-    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client, test-weave-cli]
+    needs: [test-slack-bot, test-mcp-server, test-rag-pipeline, test-dagster-project, test-annotations, test-mcp-client, test-weave-cli, test-mcp-registry]
     runs-on: ubuntu-latest
     steps:
       - name: Tests Passed
