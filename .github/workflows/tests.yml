@@ -46,7 +46,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-slack-bot
         path: ./slack-bot/coverage-slack-bot.xml
@@ -90,7 +90,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-mcp-server
         path: ./mcp-server/coverage-mcp.xml
@@ -130,7 +130,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-rag-pipeline
         path: ./rag_pipeline/coverage-rag.xml
@@ -175,7 +175,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-dagster-project
         path: ./dagster_project/coverage-dagster.xml
@@ -252,7 +252,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-annotations
         path: ./coverage-annotations.xml
@@ -318,7 +318,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-weave-cli
         path: ./weave/coverage-weave.xml
@@ -354,7 +354,7 @@ jobs:
         fail_ci_if_error: false
         
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-mcp-registry
         path: ./mcp_registry/coverage-mcp-registry.xml
@@ -377,7 +377,7 @@ jobs:
           pip install lxml beautifulsoup4
           
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: coverage-reports
         continue-on-error: true
