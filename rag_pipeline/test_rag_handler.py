@@ -286,29 +286,45 @@ class TestRAGHandler:
 
 @pytest.mark.asyncio
 async def test_full_rag_handler():
-    """Test the complete RAG handler with a real request"""
+    """Test the complete RAG handler functionality"""
     print("\n=== Testing Full RAG Handler ===")
     
     try:
-        # Test message that should trigger the handler
-        messages = [
-            {"role": "user", "content": "Hello, can you help me?"}
-        ]
+        # Test the RAG handler instantiation and basic functionality
+        handler = RAGHandler()
+        assert handler is not None
         
-        # Mock the completion to avoid actual API calls in tests
-        with patch('litellm.completion') as mock_completion:
-            mock_completion.return_value = MagicMock(
-                choices=[MagicMock(message=MagicMock(content="I can help you!"))]
+        # Test with mock data to avoid API calls
+        mock_user_api_key_dict = MagicMock()
+        mock_user_api_key_dict.headers = {"X-Auth-Token": "test-token"}
+        mock_cache = MagicMock()
+        
+        request_data = {
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": "Hello, can you help me?"}],
+            "metadata": {"X-Auth-Token": "test-token"}
+        }
+        
+        # Mock the MCP context call
+        with patch('rag_pipeline.pre_request_hook.get_context_from_mcp', new_callable=AsyncMock) as mock_get_context:
+            mock_get_context.return_value = {
+                "context_items": [{"content": "Test context", "role": "system"}],
+                "metadata": {"retrieval_time_ms": 100, "cache_hit": False}
+            }
+            
+            # Test the handler
+            result = await handler.async_pre_call_hook(
+                user_api_key_dict=mock_user_api_key_dict,
+                cache=mock_cache,
+                data=request_data,
+                call_type="completion"
             )
             
-            response = completion(
-                model="gpt-3.5-turbo",
-                messages=messages,
-                temperature=0.7
-            )
+            # Verify the handler processed the request
+            assert "messages" in result
+            assert len(result["messages"]) > 0
             
             print(f"  ✓ Handler executed successfully")
-            assert response is not None
             
     except Exception as e:
         print(f"  ✗ Error during full handler test: {str(e)}")
