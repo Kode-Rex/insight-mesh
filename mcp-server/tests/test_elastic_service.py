@@ -97,7 +97,7 @@ class TestElasticsearchService:
         # Check that domain filtering is included
         domain_clause = [c for c in should_clauses if c.get("term", {}).get("meta.accessible_by_domains")]
         assert len(domain_clause) == 1
-        assert domain_clause[0]["term"]["meta.accessible_by_domains"] == "gmail.com"
+        assert domain_clause[0]["term"]["meta.accessible_by_domains"] == "example.com"
         
         # Check that minimum_should_match is set
         assert body["query"]["bool"]["minimum_should_match"] == 1
