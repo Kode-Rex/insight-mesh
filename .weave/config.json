@@ -76,7 +76,8 @@
         "litellm"
       ],
       "depends_on": [
-        "postgres"
+        "postgres",
+        "mcp-registry"
       ]
     },
     "slack-bot": {
@@ -120,6 +121,20 @@
         "neo4j"
       ]
     },
+    "mcp-registry": {
+      "display_name": "MCP Registry",
+      "description": "Registry service for MCP server configurations",
+      "images": [
+        "mcp-registry"
+      ],
+      "container_patterns": [
+        "mcp-registry"
+      ],
+      "depends_on": [],
+      "provides_services": [
+        "webcat"
+      ]
+    },
     "postgres": {
       "display_name": "PostgreSQL",
       "description": "Consolidated PostgreSQL database server",
@@ -152,13 +167,14 @@
     },
     "webcat": {
       "display_name": "Web Search",
-      "description": "Search search service",
+      "description": "Web search service (managed via MCP Registry)",
       "images": [
         "tmfrisinger/webcat:latest"
       ],
       "container_patterns": [
         "webcat"
-      ]
+      ],
+      "managed_by": "mcp-registry"
     },
     "neo4j": {
       "display_name": "Neo4j",

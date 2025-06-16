@@ -25,33 +25,30 @@ def tool_trusted(ctx, verbose):
 
 @tool_group.command('add')
 @click.argument('server_name')
-@click.argument('command_or_url')
+@click.argument('url')
+@click.option('--transport', default='sse', type=click.Choice(['sse', 'http']), help='Transport type (sse or http)')
+@click.option('--auth-type', type=click.Choice(['none', 'api_key', 'bearer_token', 'basic']), help='Authentication type')
+@click.option('--spec-version', default='2024-11-05', help='MCP spec version')
+@click.option('--description', help='Server description')
+@click.option('--scope', default='all', type=click.Choice(['rag', 'agent', 'all']), help='Server scope (rag, agent, or all)')
 @click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
-@click.option('--force', '-f', is_flag=True, help='Overwrite existing server configuration')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing server')
 @click.pass_context
-def tool_add(ctx, server_name, command_or_url, env, force):
-    """Add a new MCP tool to the configuration
-    
-    COMMAND_OR_URL can be either:
-    - A Docker image (e.g., my-image:latest)
-    - A full command (e.g., "npx @modelcontextprotocol/server-filesystem /path")
-    - A URL for cloud-hosted servers (e.g., https://api.example.com/mcp)
+def tool_add(ctx, server_name, url, transport, auth_type, spec_version, description, scope, env, force):
+    """Add MCP server to weave config
     
     Examples:
     
-    Add a Docker image:
-    weave tool add my-server my-image:latest --env API_KEY=secret
+    Add WebCat server:
+    weave tool add webcat http://webcat:8765/mcp --description "Web search tool"
     
-    Add a cloud-hosted server:
-    weave tool add jira-cloud https://mcp.atlassian.com --env ATLASSIAN_API_TOKEN=your-token
+    Add with environment variables:
+    weave tool add webcat http://webcat:8765/mcp --env API_KEY=secret --env TIMEOUT=30
     
-    Add an NPX command:
-    weave tool add my-files "npx @modelcontextprotocol/server-filesystem /home/user/docs"
-    
-    Add a Python module:
-    weave tool add my-python-tool "python -m my_mcp_package" --env CONFIG_PATH=/path/to/config
+    Add with authentication:
+    weave tool add secure-api https://api.example.com/mcp --auth-type bearer_token --env BEARER_TOKEN=your-token
     """
-    verbose = ctx.obj.get('VERBOSE', False)
+    from .mcp_config import add_mcp_server_to_config
     
     # Parse environment variables
     env_dict = {}
@@ -62,121 +59,54 @@ def tool_add(ctx, server_name, command_or_url, env, force):
         key, value = env_var.split('=', 1)
         env_dict[key] = value
     
-    # Auto-detect type and parse command_or_url
-    if command_or_url.startswith(('http://', 'https://')):
-        # Cloud-hosted server
-        server_type = "cloud"
-        endpoint = command_or_url
-        command = None
-        args = []
-        description = f"Cloud-hosted MCP server at {endpoint}"
-    elif ' ' in command_or_url:
-        # Full command with arguments
-        server_type = "docker"
-        command_parts = command_or_url.split()
-        if command_parts[0] == "docker":
-            # Already a docker command
-            command = command_parts[0]
-            args = command_parts[1:]
-        else:
-            # Wrap in docker run
-            command = "docker"
-            args = ["run", "-d", "--rm", "--name", f"mcp-{server_name}"] + command_parts
-        endpoint = None
-        description = f"Docker-based MCP server: {command_or_url}"
-    else:
-        # Assume it's a Docker image
-        server_type = "docker"
-        command = "docker"
-        args = ["run", "-d", "--rm", "--name", f"mcp-{server_name}", command_or_url]
-        endpoint = None
-        description = f"Docker MCP server using image: {command_or_url}"
-    
-    success = add_tool(
-        server_name,
-        command=command,
-        args=args,
-        env=env_dict,
-        server_type=server_type,
-        endpoint=endpoint,
-        version="latest",
-        description=description,
+    success = add_mcp_server_to_config(
+        server_name=server_name,
+        url=url,
+        transport=transport,
+        auth_type=auth_type,
+        spec_version=spec_version,
+        description=description or f"MCP server at {url}",
+        env_vars=env_dict,
+        scope=scope,
         force=force
     )
     
-    if success and verbose:
-        if server_type == "cloud":
-            console.print(f"[blue]Added cloud-hosted MCP server: {endpoint}[/blue]")
-        else:
-            console.print(f"[blue]Added Docker MCP server: {command_or_url}[/blue]")
+    if success:
+        console.print(f"[green]✅ Added MCP server '{server_name}' to weave config[/green]")
+        console.print("[blue]💡 Server is now available via the registry API and RAG hooks[/blue]")
+    else:
+        console.print(f"[red]❌ Failed to add MCP server '{server_name}'[/red]")
 
 @tool_group.command('remove')
 @click.argument('server_name')
 @click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
 @click.pass_context
 def tool_remove(ctx, server_name, yes):
-    """Remove an MCP tool from the configuration"""
+    """Remove MCP server from weave config"""
+    from .mcp_config import remove_mcp_server_from_config
+    
     if not yes:
-        if not click.confirm(f"Are you sure you want to remove '{server_name}'?"):
+        if not click.confirm(f"Are you sure you want to remove MCP server '{server_name}'?"):
             console.print("[yellow]Operation cancelled.[/yellow]")
             return
     
-    remove_tool(server_name)
+    success = remove_mcp_server_from_config(server_name)
+    
+    if success:
+        console.print(f"[green]✅ Removed MCP server '{server_name}' from weave config[/green]")
+        console.print("[blue]💡 Server is no longer available via the registry API and RAG hooks[/blue]")
+    else:
+        console.print(f"[red]❌ Failed to remove MCP server '{server_name}'[/red]")
 
 @tool_group.command('list')
 @click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
 @click.pass_context
 def tool_list(ctx, verbose):
-    """List MCP servers that are installed/configured
+    """List MCP servers in weave config"""
+    from .mcp_config import list_mcp_servers_from_config
     
-    This shows the servers that are actually installed and tracked in the weave config file,
-    as opposed to 'trusted' which shows all available servers in the MCP config.
-    """
     verbose_flag = ctx.obj.get('VERBOSE', False) or verbose
-    
-    # Read from weave config instead of MCP config
-    weave_config = get_weave_config()
-    installed_tools = weave_config.get("mcp", {}).get("tools", {})
-    
-    if not installed_tools:
-        console.print("[yellow]No MCP servers are currently installed/configured in weave.[/yellow]")
-        console.print(f"[blue]Weave config file: {Path.cwd() / '.weave' / 'config.json'}[/blue]")
-        console.print("[blue]Use 'weave tool add <server-name>' to add tools[/blue]")
-        console.print("[blue]Use 'weave tool trusted' to see available tools[/blue]")
-        return
-    
-    table = Table(title=f"Installed MCP Tools in Weave ({len(installed_tools)} configured)")
-    table.add_column("Tool", style="cyan", no_wrap=True)
-    table.add_column("Service", style="magenta", no_wrap=True)
-    table.add_column("Description", style="green")
-    table.add_column("URL", style="yellow")
-    
-    if verbose_flag:
-        table.add_column("Permissions", style="blue")
-    
-    for tool_name, tool_config in installed_tools.items():
-        service = tool_config.get("service", "N/A")
-        description = tool_config.get("description", "No description")
-        url = tool_config.get("url", "Not configured")
-        permissions = tool_config.get("permissions", [])
-        
-        row_data = [tool_name, service, description, url]
-        
-        if verbose_flag:
-            perm_display = ", ".join(permissions) if permissions else "None"
-            row_data.append(perm_display)
-        
-        table.add_row(*row_data)
-    
-    console.print(table)
-    
-    if verbose_flag:
-        console.print(f"\n[blue]Weave config file: {Path.cwd() / '.weave' / 'config.json'}[/blue]")
-        console.print(f"[blue]Total tools installed in weave: {len(installed_tools)}[/blue]")
-        
-        # Show services breakdown
-        services = set(tool.get("service", "unknown") for tool in installed_tools.values())
-        console.print(f"[blue]Services used: {', '.join(services)}[/blue]")
+    list_mcp_servers_from_config(verbose=verbose_flag)
 
 @tool_group.command('config')
 @click.option('--path', '-p', help='Set the MCP configuration file path')
@@ -247,189 +177,69 @@ def tool_config(ctx, path, show):
         console.print("[yellow]Use --path to set the MCP configuration path or --show to display current path[/yellow]")
         console.print("[yellow]Example: weave tool config --path ~/.cursor/mcp.json[/yellow]")
 
-@tool_group.command('sync')
-@click.option('--litellm-url', default='http://localhost:4000', help='LiteLLM proxy URL')
-@click.option('--api-key', help='LiteLLM API key (defaults to sk-litellm-master-key-123456)')
-@click.option('--dry-run', is_flag=True, help='Show what would be synced without doing it')
+
+
+
+
+@tool_group.command('test-registry')
+@click.option('--registry-url', default='http://localhost:8888', help='MCP Registry URL')
 @click.pass_context
-def tool_sync(ctx, litellm_url, api_key, dry_run):
-    """Sync MCP servers from weave config to LiteLLM database
+def tool_test_registry(ctx, registry_url):
+    """Test the MCP configuration registry server"""
+    import requests
+    from rich.json import JSON
     
-    This command reads MCP server configurations from .weave/config.json
-    and creates/updates them in the LiteLLM proxy database via API.
+    console.print(f"[blue]Testing MCP Registry at: {registry_url}[/blue]")
     
-    Only servers with scope 'rag' or 'all' are synced to LiteLLM.
-    Servers with scope 'agent' are excluded from sync.
-    
-    Examples:
-    
-    Sync RAG-compatible MCP servers:
-    weave tool sync
-    
-    Sync with custom LiteLLM URL:
-    weave tool sync --litellm-url http://litellm:4000
-    
-    Preview what would be synced:
-    weave tool sync --dry-run
-    """
-    from .mcp_sync import sync_mcp_servers_to_litellm
-    
-    # Default API key
-    if not api_key:
-        api_key = "sk-litellm-master-key-123456"
-    
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    success = sync_mcp_servers_to_litellm(
-        litellm_url=litellm_url,
-        api_key=api_key,
-        dry_run=dry_run,
-        verbose=verbose
-    )
-    
-    if success:
-        if dry_run:
-            console.print("[green]✅ Sync preview completed[/green]")
+    try:
+        # Test health check
+        console.print("\n[yellow]1. Testing health check...[/yellow]")
+        response = requests.get(f"{registry_url}/health", timeout=10)
+        if response.status_code == 200:
+            console.print("[green]✓ Health check passed[/green]")
+            console.print(JSON.from_data(response.json()))
         else:
-            console.print("[green]✅ MCP servers synced successfully[/green]")
-    else:
-        console.print("[red]❌ Sync failed[/red]")
-        ctx.exit(1)
-
-@click.group('server', invoke_without_command=True)
-@click.pass_context
-def tool_server(ctx):
-    """Manage MCP servers in weave config"""
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
-
-# Add the server group to the tool group
-tool_group.add_command(tool_server)
-
-@tool_server.command('add')
-@click.argument('server_name')
-@click.argument('url')
-@click.option('--transport', default='sse', type=click.Choice(['sse', 'http']), help='Transport type (sse or http)')
-@click.option('--auth-type', type=click.Choice(['none', 'api_key', 'bearer_token', 'basic']), help='Authentication type')
-@click.option('--spec-version', default='2024-11-05', help='MCP spec version')
-@click.option('--description', help='Server description')
-@click.option('--scope', default='all', type=click.Choice(['rag', 'agent', 'all']), help='Server scope (rag, agent, or all)')
-@click.option('--env', '-e', multiple=True, help='Environment variables in KEY=VALUE format')
-@click.option('--force', '-f', is_flag=True, help='Overwrite existing server')
-@click.pass_context
-def tool_server_add(ctx, server_name, url, transport, auth_type, spec_version, description, scope, env, force):
-    """Add MCP server to weave config
-    
-    Examples:
-    
-    Add WebCat server:
-    weave tool server add webcat http://webcat:8765/mcp --description "Web search tool"
-    
-    Add with environment variables:
-    weave tool server add webcat http://webcat:8765/mcp --env API_KEY=secret --env TIMEOUT=30
-    
-    Add with authentication:
-    weave tool server add secure-api https://api.example.com/mcp --auth-type bearer_token --env BEARER_TOKEN=your-token
-    """
-    from .mcp_config import add_mcp_server_to_config
-    
-    # Parse environment variables
-    env_dict = {}
-    for env_var in env:
-        if '=' not in env_var:
-            console.print(f"[red]Invalid environment variable format: {env_var}. Use KEY=VALUE[/red]")
+            console.print(f"[red]✗ Health check failed: {response.status_code}[/red]")
             return
-        key, value = env_var.split('=', 1)
-        env_dict[key] = value
-    
-    success = add_mcp_server_to_config(
-        server_name=server_name,
-        url=url,
-        transport=transport,
-        auth_type=auth_type,
-        spec_version=spec_version,
-        description=description or f"MCP server at {url}",
-        env_vars=env_dict,
-        scope=scope,
-        force=force
-    )
-    
-    if success:
-        console.print(f"[green]✅ Added MCP server '{server_name}' to weave config[/green]")
-        console.print("[blue]💡 Run 'weave tool sync' to push to LiteLLM database[/blue]")
-    else:
-        console.print(f"[red]❌ Failed to add MCP server '{server_name}'[/red]")
+        
+        # Test get all servers
+        console.print("\n[yellow]2. Testing get all servers...[/yellow]")
+        response = requests.get(f"{registry_url}/servers", timeout=10)
+        if response.status_code == 200:
+            servers = response.json()
+            console.print(f"[green]✓ Found {len(servers)} servers[/green]")
+            console.print(JSON.from_data(servers))
+        else:
+            console.print(f"[red]✗ Failed to get servers: {response.status_code}[/red]")
+            
+        # Test get RAG servers
+        console.print("\n[yellow]3. Testing get RAG servers...[/yellow]")
+        response = requests.get(f"{registry_url}/servers/rag", timeout=10)
+        if response.status_code == 200:
+            rag_servers = response.json()
+            console.print(f"[green]✓ Found {len(rag_servers)} RAG servers[/green]")
+            console.print(JSON.from_data(rag_servers))
+        else:
+            console.print(f"[red]✗ Failed to get RAG servers: {response.status_code}[/red]")
+            
+        # Test get full config
+        console.print("\n[yellow]4. Testing get full config...[/yellow]")
+        response = requests.get(f"{registry_url}/config", timeout=10)
+        if response.status_code == 200:
+            config = response.json()
+            console.print("[green]✓ Config retrieved successfully[/green]")
+            console.print(f"[blue]Config path: {config.get('config_path')}[/blue]")
+            console.print(f"[blue]Last modified: {config.get('last_modified')}[/blue]")
+            console.print(f"[blue]Total servers: {len(config.get('servers', {}))}[/blue]")
+        else:
+            console.print(f"[red]✗ Failed to get config: {response.status_code}[/red]")
+            
+    except requests.exceptions.ConnectionError:
+        console.print(f"[red]✗ Could not connect to registry at {registry_url}[/red]")
+        console.print("[yellow]Make sure the mcp-registry service is running[/yellow]")
+    except requests.exceptions.Timeout:
+        console.print(f"[red]✗ Timeout connecting to registry at {registry_url}[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Error testing registry: {str(e)}[/red]")
 
-@tool_server.command('remove')
-@click.argument('server_name')
-@click.option('--yes', '-y', is_flag=True, help='Skip confirmation prompt')
-@click.pass_context
-def tool_server_remove(ctx, server_name, yes):
-    """Remove MCP server from weave config"""
-    from .mcp_config import remove_mcp_server_from_config
-    
-    if not yes:
-        if not click.confirm(f"Are you sure you want to remove MCP server '{server_name}'?"):
-            console.print("[yellow]Operation cancelled.[/yellow]")
-            return
-    
-    success = remove_mcp_server_from_config(server_name)
-    
-    if success:
-        console.print(f"[green]✅ Removed MCP server '{server_name}' from weave config[/green]")
-        console.print("[blue]💡 Run 'weave tool sync' to update LiteLLM database[/blue]")
-    else:
-        console.print(f"[red]❌ Failed to remove MCP server '{server_name}'[/red]")
-
-@tool_server.command('list')
-@click.option('--verbose', '-v', is_flag=True, help='Show detailed information')
-@click.pass_context
-def tool_server_list(ctx, verbose):
-    """List MCP servers in weave config"""
-    from .mcp_config import list_mcp_servers_from_config
-    
-    verbose_flag = ctx.obj.get('VERBOSE', False) or verbose
-    list_mcp_servers_from_config(verbose=verbose_flag)
-
-@tool_group.command('init')
-@click.option('--litellm-url', default='http://localhost:4000', help='LiteLLM proxy URL')
-@click.option('--api-key', help='LiteLLM API key (defaults to sk-litellm-master-key-123456)')
-@click.option('--wait-for-service', is_flag=True, help='Wait for LiteLLM service to be ready')
-@click.pass_context
-def tool_init(ctx, litellm_url, api_key, wait_for_service):
-    """Initialize MCP servers on startup
-    
-    This command is designed to be run on container startup to ensure
-    MCP servers from weave config are synced to LiteLLM database.
-    
-    Only servers with scope 'rag' or 'all' are synced to LiteLLM.
-    Servers with scope 'agent' are excluded from initialization.
-    
-    Examples:
-    
-    Initialize RAG-compatible MCP servers:
-    weave tool init
-    
-    Wait for LiteLLM to be ready first:
-    weave tool init --wait-for-service
-    """
-    from .mcp_sync import init_mcp_servers
-    
-    # Default API key
-    if not api_key:
-        api_key = "sk-litellm-master-key-123456"
-    
-    verbose = ctx.obj.get('VERBOSE', False)
-    
-    success = init_mcp_servers(
-        litellm_url=litellm_url,
-        api_key=api_key,
-        wait_for_service=wait_for_service,
-        verbose=verbose
-    )
-    
-    if success:
-        console.print("[green]✅ MCP servers initialized successfully[/green]")
-    else:
-        console.print("[red]❌ MCP initialization failed[/red]")
-        ctx.exit(1) 
+ 
