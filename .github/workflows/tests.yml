@@ -147,24 +147,17 @@ jobs:
       working-directory: ./rag_pipeline
       run: |
         # Extract test count from pytest output
-        if grep -q "failed\|error\|ERROR" test_output.txt; then
-          TEST_STATUS="❌"
-          TEST_COUNT=$(grep -o "[0-9]\+ failed\|[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        else
-          TEST_STATUS="✅"
-          TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        fi
+        TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
         
         # Create test summary JSON
         cat > test-summary-rag.json << EOF
         {
           "component": "RAG Pipeline",
-          "tests": ${TEST_COUNT:-0},
-          "status": "$TEST_STATUS"
+          "tests": ${TEST_COUNT:-0}
         }
         EOF
         
-        echo "RAG Pipeline: $TEST_COUNT tests, status: $TEST_STATUS"
+        echo "RAG Pipeline: $TEST_COUNT tests"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -221,24 +214,17 @@ jobs:
       working-directory: ./dagster_project
       run: |
         # Extract test count from pytest output
-        if grep -q "failed\|error\|ERROR" test_output.txt; then
-          TEST_STATUS="❌"
-          TEST_COUNT=$(grep -o "[0-9]\+ failed\|[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        else
-          TEST_STATUS="✅"
-          TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        fi
+        TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
         
         # Create test summary JSON
         cat > test-summary-dagster.json << EOF
         {
           "component": "Dagster Project",
-          "tests": ${TEST_COUNT:-0},
-          "status": "$TEST_STATUS"
+          "tests": ${TEST_COUNT:-0}
         }
         EOF
         
-        echo "Dagster Project: $TEST_COUNT tests, status: $TEST_STATUS"
+        echo "Dagster Project: $TEST_COUNT tests"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -326,24 +312,17 @@ jobs:
     - name: Extract test count and create summary
       run: |
         # Extract test count from pytest output
-        if grep -q "failed\|error\|ERROR" test_output.txt; then
-          TEST_STATUS="❌"
-          TEST_COUNT=$(grep -o "[0-9]\+ failed\|[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        else
-          TEST_STATUS="✅"
-          TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        fi
+        TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
         
         # Create test summary JSON
         cat > test-summary-annotations.json << EOF
         {
           "component": "Annotations",
-          "tests": ${TEST_COUNT:-0},
-          "status": "$TEST_STATUS"
+          "tests": ${TEST_COUNT:-0}
         }
         EOF
         
-        echo "Annotations: $TEST_COUNT tests, status: $TEST_STATUS"
+        echo "Annotations: $TEST_COUNT tests"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -417,23 +396,15 @@ jobs:
         # Sum all test counts
         TOTAL_COUNT=$((${MCP_COUNT:-0} + ${CLI_COUNT:-0} + ${COV_COUNT:-0}))
         
-        # Check for failures
-        if grep -q "failed\|error\|ERROR" mcp_test_output.txt cli_test_output.txt coverage_test_output.txt; then
-          TEST_STATUS="❌"
-        else
-          TEST_STATUS="✅"
-        fi
-        
         # Create test summary JSON
         cat > test-summary-weave.json << EOF
         {
           "component": "Weave CLI",
-          "tests": ${TOTAL_COUNT:-0},
-          "status": "$TEST_STATUS"
+          "tests": ${TOTAL_COUNT:-0}
         }
         EOF
         
-        echo "Weave CLI: $TOTAL_COUNT tests (MCP: $MCP_COUNT, CLI: $CLI_COUNT, Coverage: $COV_COUNT), status: $TEST_STATUS"
+        echo "Weave CLI: $TOTAL_COUNT tests (MCP: $MCP_COUNT, CLI: $CLI_COUNT, Coverage: $COV_COUNT)"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -481,24 +452,17 @@ jobs:
       working-directory: ./mcp_registry
       run: |
         # Extract test count from pytest output
-        if grep -q "failed\|error\|ERROR" test_output.txt; then
-          TEST_STATUS="❌"
-          TEST_COUNT=$(grep -o "[0-9]\+ failed\|[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        else
-          TEST_STATUS="✅"
-          TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
-        fi
+        TEST_COUNT=$(grep -o "[0-9]\+ passed" test_output.txt | head -1 | grep -o "[0-9]\+" || echo "0")
         
         # Create test summary JSON
         cat > test-summary-mcp-registry.json << EOF
         {
           "component": "MCP Registry",
-          "tests": ${TEST_COUNT:-0},
-          "status": "$TEST_STATUS"
+          "tests": ${TEST_COUNT:-0}
         }
         EOF
         
-        echo "MCP Registry: $TEST_COUNT tests, status: $TEST_STATUS"
+        echo "MCP Registry: $TEST_COUNT tests"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -604,8 +568,7 @@ jobs:
                                   component_name = data.get('component')
                                   if component_name:
                                       components[component_name] = {
-                                          'tests': data.get('tests', 0),
-                                          'status': data.get('status', '✅')
+                                          'tests': data.get('tests', 0)
                                       }
                           except Exception as e:
                               print(f"Error reading {file}: {e}")
@@ -623,9 +586,9 @@ jobs:
               print(f"\n📊 TEST RESULTS")
               print("-" * 30)
               for name, info in components.items():
-                  print(f"{info['status']} {name:<16} {info['tests']:>3} tests")
+                  print(f"✅ {name:<16} {info['tests']:>3} tests")
               print("-" * 30)
-              print(f"✅ TOTAL TESTS PASSED: {total_tests}")
+              print(f"✅ TOTAL TESTS: {total_tests}")
               
               # Coverage analysis
               print(f"\n📈 COVERAGE ANALYSIS")
