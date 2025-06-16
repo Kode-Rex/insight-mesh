@@ -76,8 +76,7 @@ class TestEventHandlers:
     @pytest.mark.asyncio
     async def test_process_message_by_context_dm(self, mock_slack_service, mock_llm_service):
         """Test processing message in DM context"""
-        with patch('handlers.event_handlers.handle_message') as mock_handle_message:
-            mock_handle_message = AsyncMock()
+        with patch('handlers.event_handlers.handle_message', new_callable=AsyncMock) as mock_handle_message:
             
             await process_message_by_context(
                 user_id="U12345",
@@ -95,8 +94,7 @@ class TestEventHandlers:
     @pytest.mark.asyncio
     async def test_process_message_by_context_mention(self, mock_slack_service, mock_llm_service):
         """Test processing message with bot mention"""
-        with patch('handlers.event_handlers.handle_message') as mock_handle_message:
-            mock_handle_message = AsyncMock()
+        with patch('handlers.event_handlers.handle_message', new_callable=AsyncMock) as mock_handle_message:
             
             await process_message_by_context(
                 user_id="U12345",
@@ -114,8 +112,7 @@ class TestEventHandlers:
     @pytest.mark.asyncio
     async def test_process_message_by_context_thread(self, mock_slack_service, mock_llm_service):
         """Test processing message in thread"""
-        with patch('handlers.event_handlers.handle_message') as mock_handle_message:
-            mock_handle_message = AsyncMock()
+        with patch('handlers.event_handlers.handle_message', new_callable=AsyncMock) as mock_handle_message:
             
             await process_message_by_context(
                 user_id="U12345",
@@ -190,8 +187,7 @@ class TestEventHandlers:
         """Test thread processing falls back to responding on error"""
         mock_slack_service.get_thread_info = AsyncMock(side_effect=Exception("Permission error"))
         
-        with patch('handlers.event_handlers.handle_message') as mock_handle_message:
-            mock_handle_message = AsyncMock()
+        with patch('handlers.event_handlers.handle_message', new_callable=AsyncMock) as mock_handle_message:
             
             await process_message_by_context(
                 user_id="U12345",
