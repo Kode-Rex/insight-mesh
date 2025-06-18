@@ -97,7 +97,7 @@ async def validate_token(token: str, token_type: str) -> UserInfo:
             try:
                 slack_user = await get_slack_user_by_id(user_id)
             except Exception as e:
-                logger.warning(f"Error looking up Slack user {user_id}: {str(e)}, using default")
+                logger.warning(f"Database error looking up Slack user {user_id}: {str(e)}, using default")
                 # Fallback to default when lookup fails
                 return UserInfo(
                     id=user_id,
