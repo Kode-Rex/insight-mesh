@@ -67,6 +67,7 @@ services:
       - MCP_REGISTRY_URL=http://mcp-registry:8080
       - ENABLE_MCP_TOOL_EXECUTION=false
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - WEBCAT_API_KEY=${WEBCAT_API_KEY}
     volumes:
