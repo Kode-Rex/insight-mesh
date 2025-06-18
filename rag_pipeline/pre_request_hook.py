@@ -429,15 +429,13 @@ class RAGHandler(CustomLogger):
 
     async def async_post_call_success_hook(
         self,
-        user_api_key_dict,
-        response_obj,
-        start_time: float,
-        end_time: float
+        **kwargs
     ):
         """Handle tool calls in LLM responses - DISABLED since not using LiteLLM proxy for MCP tools"""
         # MCP tool execution disabled - just return the response as-is
-        logger.debug(f"Post-call hook completed in {end_time - start_time:.2f}s (MCP tool execution disabled)")
-        return response_obj
+        response = kwargs.get('response')
+        logger.debug(f"Post-call hook completed (MCP tool execution disabled)")
+        return response
     
 # _execute_mcp_tool_call method removed - not using LiteLLM proxy for MCP tool execution
 
