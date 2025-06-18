@@ -49,11 +49,6 @@ MCP_TIMEOUT = int(os.environ.get("MCP_TIMEOUT", "30"))  # Timeout in seconds
 MCP_MAX_RETRIES = int(os.environ.get("MCP_MAX_RETRIES", "3"))
 TOKEN_TYPE = os.environ.get("TOKEN_TYPE", "OpenWebUI")  # Type of JWT token being used
 
-# MCP Tools configuration (disabled - using direct MCP server integration instead)
-# LITELLM_PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
-# LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-1234")
-# ENABLE_MCP_TOOLS = os.environ.get("ENABLE_MCP_TOOLS", "false").lower() == "true"
-
 # MCP Registry configuration (for reading config)
 MCP_REGISTRY_URL = os.environ.get("MCP_REGISTRY_URL", "http://mcp-registry:8080")
 
